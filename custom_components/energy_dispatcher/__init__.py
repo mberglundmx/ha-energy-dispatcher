@@ -6,6 +6,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
 
@@ -14,11 +15,12 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["energy_dispatcher"]
 
 
-async def async_setup(hass: HomeAssistant) -> None:
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up services once for the integration."""
     from .services import async_setup_services
 
     async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
