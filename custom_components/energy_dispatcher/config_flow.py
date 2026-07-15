@@ -216,12 +216,17 @@ class LoadSubentryFlowHandler(ConfigSubentryFlow):
                     data=load_config_to_subentry_data(load),
                 )
 
-            await self.async_set_unique_id(load_id)
-            self._abort_if_unique_id_configured()
+            if _subentry_id_exists(self._get_entry(), load_id):
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=LOAD_SCHEMA,
+                    errors={"base": "load_exists"},
+                )
             load = _load_from_user_input(user_input, load_id)
             return self.async_create_entry(
                 title=user_input[CONF_LOAD_NAME],
                 data=load_config_to_subentry_data(load),
+                unique_id=load_id,
             )
 
         defaults: dict[str, Any] = {}
