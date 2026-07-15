@@ -35,6 +35,15 @@
   "config_subentries": {
     "load": {
       "title": "Load",
+      "entry_type": "Load",
+      "initiate_flow": {
+        "user": "Add load",
+        "reconfigure": "Configure load"
+      },
+      "abort": {
+        "already_configured": "This load is already configured.",
+        "reconfigure_successful": "Load updated successfully."
+      },
       "step": {
         "user": {
           "title": "Add load",
