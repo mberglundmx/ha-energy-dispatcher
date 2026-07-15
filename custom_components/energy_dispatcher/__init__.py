@@ -51,6 +51,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     coordinator = EnergyDispatcherCoordinator(hass, entry)
     await coordinator.async_load_runtime()
+    coordinator.async_setup_listeners()
     await coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id] = {
@@ -77,6 +78,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     from homeassistant.helpers.entity_component import EntityComponent
 
     component: EntityComponent[Entity] = hass.data[DOMAIN]["entity_component"]
+    entry_data = hass.data[DOMAIN].get(entry.entry_id)
+    if entry_data is not None:
+        entry_data["coordinator"].async_shutdown_listeners()
     unload_ok = await component.async_unload_entry(entry)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)

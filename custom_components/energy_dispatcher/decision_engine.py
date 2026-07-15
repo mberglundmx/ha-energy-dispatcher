@@ -12,6 +12,8 @@ from .const import (
     ENERGY_MODE_GRID_NORMAL,
     ENERGY_MODE_SOLAR,
     GRID_STATE_CRITICAL,
+    PRICE_STATE_UNKNOWN,
+    REASON_DATA_UNAVAILABLE,
     REASON_GRID_CHEAP,
     REASON_GRID_EXPORT,
     REASON_GRID_FREE,
@@ -23,12 +25,16 @@ from .const import (
     REASON_POWER_GUARD,
     STATE_OFF,
     STATE_ON,
+    STATE_UNKNOWN,
 )
 from .decision_helpers import (
     available_export_power,
     classify_price,
     is_mode_allowed,
+    is_price_data_ready,
+    needs_price_data,
     price_state,
+    solar_can_decide_without_price,
 )
 from .models import Decision, GlobalState, LoadConfig, OverrideState
 from .runtime_scheduler import RuntimeTracker
@@ -74,6 +80,13 @@ def evaluate_load(
             **base_kwargs,
         )
 
+    if (
+        needs_price_data(load, global_state)
+        and not is_price_data_ready(global_state)
+        and not solar_can_decide_without_price(load, global_state)
+    ):
+        return _unknown_decision(load, global_state, base_kwargs)
+
     export_decision = _evaluate_export(global_state, load, base_kwargs)
     if export_decision is not None:
         return export_decision
@@ -106,6 +119,24 @@ def evaluate_load(
         reason_text="No allowed energy source available",
         next_opportunity=None,
         **base_kwargs,
+    )
+
+
+def _unknown_decision(
+    load: LoadConfig,
+    global_state: GlobalState,
+    base_kwargs: dict,
+) -> Decision:
+    return Decision(
+        state=STATE_UNKNOWN,
+        energy_mode=ENERGY_MODE_BLOCKED,
+        reason=REASON_DATA_UNAVAILABLE,
+        reason_text="Waiting for price sensor data",
+        next_opportunity=None,
+        available_power=base_kwargs["available_power"],
+        required_power=load.required_power,
+        price_state=PRICE_STATE_UNKNOWN,
+        grid_state=base_kwargs["grid_state"],
     )
 
 

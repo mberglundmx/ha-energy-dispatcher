@@ -11,8 +11,10 @@ from .const import (
     PRICE_STATE_HIGH,
     PRICE_STATE_LOW,
     PRICE_STATE_NORMAL,
+    PRICE_STATE_UNKNOWN,
 )
-from .models import GlobalState, PriceSlot, SourceRules
+from .models import GlobalState, PriceSlot, SourceRules, LoadConfig
+from .price_timeline import current_slot
 
 
 def available_export_power(global_state: GlobalState) -> float:
@@ -50,10 +52,51 @@ def is_mode_allowed(mode: str, sources: SourceRules) -> bool:
 
 def price_state(current: PriceSlot | None, global_state: GlobalState) -> str:
     if current is None:
-        return PRICE_STATE_NORMAL
+        return PRICE_STATE_UNKNOWN
     mode = classify_price(current.price, global_state)
     if mode in (ENERGY_MODE_GRID_FREE, ENERGY_MODE_GRID_CHEAP, ENERGY_MODE_SOLAR):
         return PRICE_STATE_LOW
     if mode == ENERGY_MODE_GRID_EXPENSIVE:
         return PRICE_STATE_HIGH
     return PRICE_STATE_NORMAL
+
+
+def has_grid_sources(sources: SourceRules) -> bool:
+    return any(
+        (
+            sources.grid_free_enabled,
+            sources.grid_cheap_enabled,
+            sources.grid_normal_enabled,
+            sources.grid_expensive_enabled,
+        )
+    )
+
+
+def is_price_data_ready(global_state: GlobalState) -> bool:
+    return current_slot(global_state.price_timeline, global_state.now) is not None
+
+
+def needs_price_data(load: LoadConfig, global_state: GlobalState) -> bool:
+    if load.minimum_minutes_per_day or load.minimum_minutes_per_week:
+        return True
+    if has_grid_sources(load.sources):
+        return True
+    if (
+        load.sources.solar_enabled
+        and load.sources.solar_max_export_price is not None
+    ):
+        return True
+    return False
+
+
+def solar_can_decide_without_price(load: LoadConfig, global_state: GlobalState) -> bool:
+    if not load.sources.solar_enabled:
+        return False
+    if available_export_power(global_state) < load.required_power:
+        return False
+    if (
+        load.sources.solar_max_export_price is not None
+        and global_state.export_price is None
+    ):
+        return False
+    return True

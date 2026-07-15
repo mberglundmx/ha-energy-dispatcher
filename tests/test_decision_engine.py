@@ -9,10 +9,12 @@ from custom_components.energy_dispatcher.const import (
     ENERGY_MODE_SOLAR,
     GRID_STATE_CRITICAL,
     POWER_GUARD_STRATEGY_SIMPLE_THRESHOLD,
+    REASON_DATA_UNAVAILABLE,
     REASON_GRID_EXPORT,
     REASON_NOT_CHEAP_YET,
     STATE_OFF,
     STATE_ON,
+    STATE_UNKNOWN,
 )
 from custom_components.energy_dispatcher.decision_engine import evaluate_load
 from custom_components.energy_dispatcher.models import (
@@ -128,6 +130,43 @@ def test_off_with_next_opportunity_when_not_cheap_yet() -> None:
     assert decision.reason == REASON_NOT_CHEAP_YET
     assert decision.next_opportunity is not None
     assert decision.energy_mode == ENERGY_MODE_GRID_CHEAP
+
+
+def test_unknown_when_price_data_missing() -> None:
+    decision = evaluate_load(
+        _global_state(
+            grid_output=0,
+            price_timeline=(),
+            export_price=None,
+        ),
+        _load(
+            sources=SourceRules(
+                solar_enabled=False,
+                grid_free_enabled=True,
+                grid_cheap_enabled=True,
+                grid_normal_enabled=True,
+                grid_expensive_enabled=True,
+            )
+        ),
+        RuntimeTracker(),
+    )
+    assert decision.state == STATE_UNKNOWN
+    assert decision.reason == REASON_DATA_UNAVAILABLE
+    assert decision.price_state == "UNKNOWN"
+
+
+def test_solar_still_works_without_price_timeline() -> None:
+    decision = evaluate_load(
+        _global_state(
+            grid_output=2500,
+            price_timeline=(),
+            export_price=None,
+        ),
+        _load(),
+        RuntimeTracker(),
+    )
+    assert decision.state == STATE_ON
+    assert decision.energy_mode == ENERGY_MODE_SOLAR
 
 
 def test_power_guard_critical_forces_off() -> None:

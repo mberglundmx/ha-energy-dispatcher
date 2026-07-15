@@ -7,7 +7,8 @@ import logging
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
@@ -67,6 +68,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._runtime_trackers: dict[str, RuntimeTracker] = {}
         self._hourly_aggregator = HourlyAggregator()
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+        self._listener_cancel = None
         self._reload_loads()
 
     async def async_load_runtime(self) -> None:
@@ -164,6 +166,36 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def get_runtime_tracker(self, load_id: str) -> RuntimeTracker:
         return self._runtime_trackers.get(load_id, RuntimeTracker())
+
+    @callback
+    def async_setup_listeners(self) -> None:
+        """Refresh immediately when dependency sensors change."""
+        entity_ids = [
+            entity_id
+            for entity_id in (
+                self.entry.data.get(CONF_PRICE_SENSOR),
+                _grid_input_entity(self.entry.data),
+                _grid_output_entity(self.entry.data),
+            )
+            if entity_id
+        ]
+        if not entity_ids:
+            return
+
+        @callback
+        def _handle_sensor_change(_event) -> None:
+            self.async_request_refresh()
+
+        self._listener_cancel = async_track_state_change_event(
+            self.hass, entity_ids, _handle_sensor_change
+        )
+
+    @callback
+    def async_shutdown_listeners(self) -> None:
+        """Remove dependency sensor listeners."""
+        if self._listener_cancel is not None:
+            self._listener_cancel()
+            self._listener_cancel = None
 
     def set_override(
         self, load_id: str, mode: str, duration: timedelta
