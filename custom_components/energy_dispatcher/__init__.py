@@ -6,20 +6,27 @@ from types import MappingProxyType
 import logging
 from typing import TYPE_CHECKING
 
-from .const import CONF_LOADS, DOMAIN, PLATFORMS, SUBENTRY_TYPE_LOAD
+from .const import CONF_LOADS, DOMAIN, SUBENTRY_TYPE_LOAD
 from .models import load_config_from_dict, load_config_to_subentry_data
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity import Entity
+    from homeassistant.helpers.entity_component import EntityComponent
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up services once for the integration."""
+    from homeassistant.helpers.entity import Entity
+    from homeassistant.helpers.entity_component import EntityComponent
+
     from .services import async_setup_services
 
+    component = EntityComponent[Entity](_LOGGER, DOMAIN, hass)
+    hass.data[DOMAIN] = {"entity_component": component}
     async_setup_services(hass)
     return True
 
@@ -27,6 +34,8 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Energy Dispatcher from a config entry."""
     from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers.entity import Entity
+    from homeassistant.helpers.entity_component import EntityComponent
 
     from .coordinator import EnergyDispatcherCoordinator
 
@@ -44,13 +53,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_load_runtime()
     await coordinator.async_config_entry_first_refresh()
 
-    hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "coordinator": coordinator,
         "entities": [],
     }
 
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    component: EntityComponent[Entity] = hass.data[DOMAIN]["entity_component"]
+    await component.async_setup_entry(entry)
     _LOGGER.debug(
         "Setup complete for %s with %d loads",
         entry.entry_id,
@@ -64,7 +73,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    from homeassistant.helpers.entity import Entity
+    from homeassistant.helpers.entity_component import EntityComponent
+
+    component: EntityComponent[Entity] = hass.data[DOMAIN]["entity_component"]
+    unload_ok = await component.async_unload_entry(entry)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
     return unload_ok

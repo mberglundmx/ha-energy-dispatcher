@@ -1,4 +1,4 @@
-"""Platform for Energy Dispatcher load entities."""
+"""Platform for Energy Dispatcher entities."""
 
 from __future__ import annotations
 

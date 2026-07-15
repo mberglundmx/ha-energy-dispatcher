@@ -2,7 +2,6 @@
 
 DOMAIN = "energy_dispatcher"
 
-PLATFORMS = ["load"]
 SUBENTRY_TYPE_LOAD = "load"
 
 CONF_PRICE_SENSOR = "price_sensor"
