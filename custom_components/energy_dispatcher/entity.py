@@ -58,7 +58,7 @@ class EnergyDispatcherEntity(CoordinatorEntity[EnergyDispatcherCoordinator], Ent
             identifiers={(DOMAIN, self._subentry_id)},
             name=self._load.name,
             manufacturer="Energy Dispatcher",
-            via_device={(DOMAIN, self.coordinator.entry.entry_id)},
+            via_device=(DOMAIN, self.coordinator.entry.entry_id),
         )
 
     @property
