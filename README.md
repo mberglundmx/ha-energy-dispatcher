@@ -58,7 +58,7 @@ Copy `custom_components/energy_dispatcher/` to your Home Assistant `config/custo
 | Spot price sensor | Yes | Any sensor with current and upcoming hourly prices |
 | Grid input sensor | Yes | Grid import power (W) |
 | Grid output sensor | Yes | Grid export power (W) |
-| Export price | Yes | Sensor **or** spot price + offset |
+| Export compensation | Yes | Fixed amount added to spot price to estimate export revenue |
 | Power guard strategy | No | Disabled (default) or simple hourly kWh limit |
 | Price thresholds | No | Free / cheap / expensive classification |
 

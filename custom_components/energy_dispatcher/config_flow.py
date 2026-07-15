@@ -13,7 +13,6 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_EXPORT_PRICE_OFFSET,
-    CONF_EXPORT_PRICE_SENSOR,
     CONF_GRID_INPUT_SENSOR,
     CONF_GRID_OUTPUT_SENSOR,
     CONF_LOAD_ID,
@@ -26,6 +25,7 @@ from .const import (
     CONF_PRICE_FREE_THRESHOLD,
     CONF_PRICE_SENSOR,
     CONF_REQUIRED_POWER,
+    DEFAULT_EXPORT_PRICE_OFFSET,
     DEFAULT_POWER_GUARD_HOURLY_LIMIT_KWH,
     DEFAULT_PRICE_CHEAP_RATIO,
     DEFAULT_PRICE_EXPENSIVE_RATIO,
@@ -47,10 +47,15 @@ STEP_USER_SCHEMA = vol.Schema(
         vol.Required(CONF_GRID_OUTPUT_SENSOR): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="sensor")
         ),
-        vol.Optional(CONF_EXPORT_PRICE_SENSOR): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="sensor")
+        vol.Required(
+            CONF_EXPORT_PRICE_OFFSET, default=DEFAULT_EXPORT_PRICE_OFFSET
+        ): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                step=0.01,
+                mode=selector.NumberSelectorMode.BOX,
+            )
         ),
-        vol.Optional(CONF_EXPORT_PRICE_OFFSET): vol.Coerce(float),
         vol.Optional(
             CONF_POWER_GUARD_STRATEGY, default=POWER_GUARD_STRATEGY_NONE
         ): selector.SelectSelector(
@@ -65,25 +70,72 @@ STEP_USER_SCHEMA = vol.Schema(
         vol.Optional(
             CONF_POWER_GUARD_HOURLY_LIMIT_KWH,
             default=DEFAULT_POWER_GUARD_HOURLY_LIMIT_KWH,
-        ): vol.Coerce(float),
-        vol.Optional(CONF_PRICE_FREE_THRESHOLD, default=DEFAULT_PRICE_FREE_THRESHOLD): vol.Coerce(
-            float
+        ): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0.1,
+                step=0.1,
+                mode=selector.NumberSelectorMode.BOX,
+            )
         ),
-        vol.Optional(CONF_PRICE_CHEAP_RATIO, default=DEFAULT_PRICE_CHEAP_RATIO): vol.Coerce(float),
+        vol.Optional(CONF_PRICE_FREE_THRESHOLD, default=DEFAULT_PRICE_FREE_THRESHOLD): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                step=0.01,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
+        vol.Optional(CONF_PRICE_CHEAP_RATIO, default=DEFAULT_PRICE_CHEAP_RATIO): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                max=1,
+                step=0.05,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
         vol.Optional(
             CONF_PRICE_EXPENSIVE_RATIO, default=DEFAULT_PRICE_EXPENSIVE_RATIO
-        ): vol.Coerce(float),
+        ): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=1,
+                step=0.1,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
     }
 )
 
 LOAD_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_LOAD_NAME): str,
-        vol.Required(CONF_REQUIRED_POWER): vol.Coerce(float),
+        vol.Required(CONF_REQUIRED_POWER): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=1,
+                step=100,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
         vol.Required("solar_enabled", default=True): bool,
-        vol.Optional("solar_max_export_price"): vol.Coerce(float),
-        vol.Optional("minimum_minutes_per_day"): vol.Coerce(int),
-        vol.Optional("minimum_minutes_per_week"): vol.Coerce(int),
+        vol.Optional("solar_max_export_price"): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                step=0.01,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
+        vol.Optional("minimum_minutes_per_day"): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                step=15,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
+        vol.Optional("minimum_minutes_per_week"): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                step=15,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
         vol.Required("grid_free_enabled", default=False): bool,
         vol.Required("grid_cheap_enabled", default=True): bool,
         vol.Required("grid_normal_enabled", default=False): bool,
@@ -100,24 +152,12 @@ class EnergyDispatcherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        errors: dict[str, str] = {}
-
         if user_input is not None:
             await self.async_set_unique_id(DOMAIN)
             self._abort_if_unique_id_configured()
+            return self.async_create_entry(title="Energy Dispatcher", data=user_input)
 
-            if not user_input.get(CONF_EXPORT_PRICE_SENSOR) and user_input.get(
-                CONF_EXPORT_PRICE_OFFSET
-            ) is None:
-                errors["base"] = "export_price_required"
-            else:
-                return self.async_create_entry(title="Energy Dispatcher", data=user_input)
-
-        return self.async_show_form(
-            step_id="user",
-            data_schema=STEP_USER_SCHEMA,
-            errors=errors,
-        )
+        return self.async_show_form(step_id="user", data_schema=STEP_USER_SCHEMA)
 
 
 class EnergyDispatcherOptionsFlow(config_entries.OptionsFlow):
@@ -154,12 +194,12 @@ class EnergyDispatcherOptionsFlow(config_entries.OptionsFlow):
             load = LoadConfig(
                 load_id=load_id,
                 name=user_input[CONF_LOAD_NAME],
-                required_power=user_input[CONF_REQUIRED_POWER],
-                minimum_minutes_per_day=user_input.get("minimum_minutes_per_day"),
-                minimum_minutes_per_week=user_input.get("minimum_minutes_per_week"),
+                required_power=float(user_input[CONF_REQUIRED_POWER]),
+                minimum_minutes_per_day=_optional_int(user_input.get("minimum_minutes_per_day")),
+                minimum_minutes_per_week=_optional_int(user_input.get("minimum_minutes_per_week")),
                 sources=SourceRules(
                     solar_enabled=user_input["solar_enabled"],
-                    solar_max_export_price=user_input.get("solar_max_export_price"),
+                    solar_max_export_price=_optional_float(user_input.get("solar_max_export_price")),
                     grid_free_enabled=user_input["grid_free_enabled"],
                     grid_cheap_enabled=user_input["grid_cheap_enabled"],
                     grid_normal_enabled=user_input["grid_normal_enabled"],
@@ -215,3 +255,15 @@ def _load_id_exists(entry: config_entries.ConfigEntry, load_id: str) -> bool:
     return any(
         load.get(CONF_LOAD_ID) == load_id for load in entry.options.get(CONF_LOADS, [])
     )
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    return float(value)
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    return int(value)

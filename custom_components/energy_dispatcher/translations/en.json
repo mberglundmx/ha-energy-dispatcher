@@ -3,23 +3,30 @@
     "step": {
       "user": {
         "title": "Energy Dispatcher",
-        "description": "Configure global energy inputs and thresholds.",
+        "description": "Connect your energy sensors and set price thresholds. Loads are added afterwards under Configure.",
         "data": {
           "price_sensor": "Spot price sensor",
-          "grid_input_sensor": "Grid input sensor (W)",
-          "grid_output_sensor": "Grid output sensor (W)",
-          "export_price_sensor": "Export price sensor",
-          "export_price_offset": "Export price offset (spot + offset)",
-          "power_guard_strategy": "Power guard strategy",
+          "grid_input_sensor": "Grid input (W)",
+          "grid_output_sensor": "Grid output (W)",
+          "export_price_offset": "Export compensation (fixed)",
+          "power_guard_strategy": "Power guard",
           "power_guard_hourly_limit_kwh": "Hourly import limit (kWh)",
-          "price_free_threshold": "Free grid price threshold",
-          "price_cheap_ratio": "Cheap price ratio of rolling average",
-          "price_expensive_ratio": "Expensive price ratio of rolling average"
+          "price_free_threshold": "Free grid threshold",
+          "price_cheap_ratio": "Cheap grid ratio",
+          "price_expensive_ratio": "Expensive grid ratio"
+        },
+        "data_description": {
+          "price_sensor": "Sensor with current and upcoming spot prices (today and tomorrow when available). Examples: Nord Pool, Tibber, Amber.",
+          "grid_input_sensor": "Instantaneous power drawn from the grid in watts (W). Used for power guard and import tracking.",
+          "grid_output_sensor": "Instantaneous power exported to the grid in watts (W). When above zero, self-consumption (SOLAR mode) may be recommended.",
+          "export_price_offset": "Fixed compensation added to the current spot price to estimate export revenue per kWh. Example: if spot is 0.50 and compensation is 0.20, export price is 0.70. Same unit as your price sensor.",
+          "power_guard_strategy": "Optional protection against high grid import. Disabled = no limit. Simple threshold = max kWh per clock hour.",
+          "power_guard_hourly_limit_kwh": "Maximum grid import energy allowed per clock hour when power guard is enabled. Example: 2.0 = 2 kWh/h.",
+          "price_free_threshold": "Spot prices at or below this absolute value are treated as free grid (GRID_FREE). Same unit as your price sensor.",
+          "price_cheap_ratio": "Spot price below this fraction of the rolling weekly average is cheap grid (GRID_CHEAP). Example: 0.30 = 30 % of average.",
+          "price_expensive_ratio": "Spot price above this fraction of the rolling weekly average is expensive grid (GRID_EXPENSIVE). Example: 1.50 = 150 % of average."
         }
       }
-    },
-    "error": {
-      "export_price_required": "Provide an export price sensor or offset."
     },
     "abort": {
       "already_configured": "Energy Dispatcher is already configured."
@@ -29,29 +36,49 @@
     "step": {
       "init": {
         "title": "Manage loads",
+        "description": "Add or remove dispatch targets. Each load becomes an energy_dispatcher entity.",
         "data": {
           "action": "Action"
+        },
+        "data_description": {
+          "action": "Add a new controllable load, or remove an existing one."
         }
       },
       "add_load": {
         "title": "Add load",
+        "description": "Define a controllable energy consumer and which energy sources it may use.",
         "data": {
           "name": "Name",
           "required_power": "Required power (W)",
-          "solar_enabled": "Prefer self-consumption over export",
-          "solar_max_export_price": "Maximum export price",
+          "solar_enabled": "Prefer self-consumption",
+          "solar_max_export_price": "Max export price",
           "minimum_minutes_per_day": "Minimum minutes per day",
           "minimum_minutes_per_week": "Minimum minutes per week",
           "grid_free_enabled": "Allow free grid",
           "grid_cheap_enabled": "Allow cheap grid",
           "grid_normal_enabled": "Allow normal grid",
           "grid_expensive_enabled": "Allow expensive grid"
+        },
+        "data_description": {
+          "name": "Display name for this load. Becomes the entity id, e.g. energy_dispatcher.dehumidifier.",
+          "required_power": "Power the load needs to run, in watts (W). Used for export/self-consumption checks.",
+          "solar_enabled": "When enabled, recommend ON (SOLAR) while power is being exported to the grid and export price is below the threshold.",
+          "solar_max_export_price": "Prefer self-consumption only when estimated export price is below this fixed level. Same unit as your price sensor. Leave empty to ignore export price.",
+          "minimum_minutes_per_day": "Minimum ON minutes required per calendar day. Missing minutes are scheduled on the cheapest allowed hours. Leave empty for no daily requirement.",
+          "minimum_minutes_per_week": "Minimum ON minutes required per ISO week. Leave empty for no weekly requirement.",
+          "grid_free_enabled": "Allow running when spot price is at or below the free grid threshold.",
+          "grid_cheap_enabled": "Allow running when spot price is below the cheap grid ratio.",
+          "grid_normal_enabled": "Allow running when spot price is within the normal range.",
+          "grid_expensive_enabled": "Allow running when spot price is above the expensive grid ratio."
         }
       },
       "remove_load": {
         "title": "Remove load",
         "data": {
           "load_id": "Load"
+        },
+        "data_description": {
+          "load_id": "Select the load to remove."
         }
       }
     },
@@ -63,7 +90,7 @@
     "power_guard_strategy": {
       "options": {
         "none": "Disabled",
-        "simple_threshold": "Simple threshold (MVP)"
+        "simple_threshold": "Hourly kWh limit"
       }
     }
   }

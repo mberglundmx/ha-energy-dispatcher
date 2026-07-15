@@ -283,18 +283,15 @@ Grid import/export is evaluated at the current moment. Weather or solar *forecas
 
 ### 7.4 Export Price
 
-Configured separately. Either:
-
-* a dedicated `selling_price_sensor`, or
-* a formula based on spot price + fixed compensation
-
-Used to decide whether self-consumption is more attractive than export.
-
-Example rule:
+Export revenue is estimated using a **fixed compensation** added to the current spot price:
 
 ```
-If export price < 20 (currency unit)/kWh → prefer self-consumption (SOLAR)
+export_price = current_spot_price + export_price_offset
 ```
+
+There is no export price sensor. The offset is configured as a fixed value in the same unit as the price sensor (e.g. öre/kWh or EUR/kWh).
+
+Per-load threshold `max_export_price` defines when self-consumption is preferred over export.
 
 ### 7.5 Power Guard (Optional)
 
@@ -686,7 +683,7 @@ Direct integration with DSO APIs (beyond the import power sensor + internal aggr
 3. Generic price sensor via PriceProvider adapter
 4. Full price timeline evaluation (today + tomorrow when available)
 5. Grid input + grid output sensors
-6. Export price (sensor or calculated)
+6. Export price compensation (fixed offset added to spot)
 7. Optional power guard via `simple_threshold` strategy on grid input
 8. Decision engine (local per entity, unit-tested)
 9. Entity states: `ON | OFF` with rich attributes

@@ -14,7 +14,6 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_EXPORT_PRICE_OFFSET,
-    CONF_EXPORT_PRICE_SENSOR,
     CONF_GRID_IMPORT_POWER_SENSOR,
     CONF_GRID_INPUT_SENSOR,
     CONF_GRID_OUTPUT_SENSOR,
@@ -228,15 +227,7 @@ def _read_export_price(
     timeline: tuple,
     now: datetime,
 ) -> float | None:
-    sensor = config.get(CONF_EXPORT_PRICE_SENSOR)
-    if sensor:
-        state = hass.states.get(sensor)
-        if state and state.state not in ("unknown", "unavailable", None, ""):
-            try:
-                return float(state.state)
-            except (TypeError, ValueError):
-                pass
-
+    """Estimate export price as spot price plus fixed compensation."""
     offset = config.get(CONF_EXPORT_PRICE_OFFSET)
     if offset is None:
         return None

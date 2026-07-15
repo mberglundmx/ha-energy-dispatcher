@@ -6,7 +6,6 @@ CONF_PRICE_SENSOR = "price_sensor"
 CONF_GRID_INPUT_SENSOR = "grid_input_sensor"
 CONF_GRID_OUTPUT_SENSOR = "grid_output_sensor"
 CONF_GRID_IMPORT_POWER_SENSOR = "grid_import_power_sensor"  # legacy alias
-CONF_EXPORT_PRICE_SENSOR = "export_price_sensor"
 CONF_EXPORT_PRICE_OFFSET = "export_price_offset"
 CONF_GRID_POWER_SENSOR = "grid_power_sensor"  # legacy alias
 CONF_POWER_GUARD_STRATEGY = "power_guard_strategy"
@@ -31,6 +30,7 @@ CONF_MINIMUM_SURPLUS = "minimum_surplus"
 CONF_MAX_EXPORT_PRICE = "max_export_price"
 
 DEFAULT_PRICE_FREE_THRESHOLD = 0.02
+DEFAULT_EXPORT_PRICE_OFFSET = 0.0
 DEFAULT_PRICE_CHEAP_RATIO = 0.3
 DEFAULT_PRICE_EXPENSIVE_RATIO = 1.5
 DEFAULT_POWER_GUARD_HOURLY_LIMIT_KWH = 2.0
