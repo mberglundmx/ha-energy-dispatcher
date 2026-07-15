@@ -1,168 +1,185 @@
-# Design Specification: Home Assistant `energy_load` Integration
+# Design Specification: Home Assistant `energy_dispatcher` Integration
 
-## 1. Syfte
+## 1. Purpose
 
-Skapa en Home Assistant custom integration som fungerar som en **energibeslutsmotor** för styrbara laster.
+Build a Home Assistant custom integration that acts as an **energy decision engine** for controllable loads.
 
-Integrationens uppgift är att avgöra:
+The integration answers:
 
-> "Är detta en lämplig tidpunkt att använda energi för denna last, och vilken energikälla är mest lämplig?"
+> "Is this a suitable time to consume energy for this load, and which energy source is most appropriate?"
 
-Integrationens output ska användas av vanliga Home Assistant-automationer som sedan styr den fysiska apparaten.
+Its output is consumed by ordinary Home Assistant automations that control the physical device.
 
-Exempel:
+Example:
 
-Integration:
+Integration output:
 
 ```
-energy_load.avfuktare
+energy_dispatcher.dehumidifier
 
-state:
-ON
+state: ON
 
-energy_mode:
-SOLAR
+energy_mode: SOLAR
 ```
 
 Automation:
 
 ```
-Om energy_mode = SOLAR:
-    sätt avfuktarens börvärde till 50 %
+If energy_mode = SOLAR:
+    set dehumidifier target humidity to 50 %
 
-Om energy_mode = GRID_CHEAP:
-    sätt börvärde till 65 %
+If energy_mode = GRID_CHEAP:
+    set target humidity to 65 %
 ```
 
-Integrationens ansvar slutar vid energibeslutet.
+The integration's responsibility ends at the energy decision. Device behaviour is handled elsewhere.
 
 ---
 
-# 2. Designprinciper
+## 2. Design Principles
 
-## Separation av ansvar
+### Separation of Concerns
 
-### Energy Load Integration ansvarar för:
+**Energy Dispatcher is responsible for:**
 
-* elpris
-* solel
-* nettoimport/export
-* effekttopp
-* ekonomiska regler
-* prioritering mellan energikällor
-* tillåtelse att köra
+* Spot price evaluation
+* Grid import/export state
+* Export economics (self-consumption vs selling)
+* Power guard (optional)
+* Economic rules
+* Energy source selection
+* Run/do-not-run recommendation
 
-### Automationer ansvarar för:
+**Automations are responsible for:**
 
-* apparatens funktion
-* börvärden
-* effektläge
-* driftläge
-* fysisk styrning
+* Device function
+* Setpoints
+* Power levels
+* Operating modes
+* Physical control
 
-Exempel:
+Example:
 
-Integration säger:
-
-```
-Kör avfuktare med energikälla SOLAR
-```
-
-Automation säger:
+Integration says:
 
 ```
-SOLAR = RH 50 %
-GRID_CHEAP = RH 65 %
+Run dehumidifier using energy source SOLAR
 ```
+
+Automation says:
+
+```
+SOLAR      → RH 50 %
+GRID_CHEAP → RH 65 %
+```
+
+### Independent Load Decisions
+
+Each `energy_dispatcher.*` entity makes a **local decision** based on grid import/export and price data.
+
+The integration does **not** perform global capacity allocation or load prioritization between multiple loads. If two loads both recommend `ON` / `SOLAR` while surplus only covers one of them, that conflict is resolved outside this integration (automations, device limits, or user configuration).
+
+### Testability
+
+Decision logic must be isolated from Home Assistant:
+
+```
+models.py           # dataclasses: GlobalState, LoadConfig, Decision, PriceSlot, PowerGuardState
+decision_engine.py  # pure logic, no HA imports
+price_provider.py   # normalizes sensor data → PriceSlot timeline
+power_guard.py      # aggregates import power + strategy evaluation (HA-free core)
+coordinator.py      # reads sensors, calls engine
+entity.py           # maps Decision → HA state and attributes
+```
+
+The decision engine must be fully unit-testable without running Home Assistant.
 
 ---
 
-# 3. Ny Home Assistant-domän
+## 3. Domain
 
-Ny domän:
-
-```
-energy_load
-```
-
-Exempel:
+Domain name:
 
 ```
-energy_load.vvb
-energy_load.avfuktare
-energy_load.elbil
+energy_dispatcher
 ```
 
-En `energy_load` representerar en energiförbrukare som kan optimeras.
+Examples:
+
+```
+energy_dispatcher.water_heater
+energy_dispatcher.dehumidifier
+energy_dispatcher.ev_charger
+```
+
+Each entity represents a controllable energy consumer whose run decision can be optimized.
+
+Repository name (`ha-energy-dispatcher`) and integration name (`energy_dispatcher`) are aligned.
 
 ---
 
-# 4. Entity State
+## 4. Entity State
 
-Varje entity har ett huvudstate:
+Each entity has a single primary state:
 
-## ON
+| State | Meaning |
+|---|---|
+| **ON** | The load is recommended to consume energy now |
+| **OFF** | The load is not recommended to consume energy now |
 
-Lasten rekommenderas att använda energi.
+Nuanced conditions (power guard warning, upcoming cheap window, blocked by price) are expressed through **attributes**, not additional states.
 
-## OFF
-
-Lasten bör inte använda energi.
-
-## LIMITED
-
-Lasten får använda energi men begränsas av någon regel.
-
-## WAITING
-
-Lasten bör köras senare för att uppfylla ett krav.
+`WAITING` and `LIMITED` are intentionally omitted. Automations should use `energy_mode`, `reason`, and `grid_state` attributes rather than inferring behaviour from extra states.
 
 ---
 
-# 5. Entity Attributes
+## 5. Entity Attributes
 
-Exempel:
+Example:
 
 ```yaml
-energy_load.avfuktare:
+energy_dispatcher.dehumidifier:
 
-state:
-  ON
+  state: ON
 
-attributes:
+  attributes:
+    energy_mode: SOLAR
+    reason: grid_export
+    reason_text: "Grid export available — prefer self-consumption"
 
-  energy_mode:
-    SOLAR
+    available_power: 3200      # W, current grid output (export to grid)
+    required_power: 1400       # W, configured load requirement
 
-  reason:
-    solar_surplus
+    price_state: LOW           # derived from current hour price
+    grid_state: NORMAL         # NORMAL | WARNING | CRITICAL (from PowerGuardState)
 
-  reason_text:
-    "Solöverskott tillgängligt"
+    next_opportunity: null     # ISO datetime; set when OFF but a future window exists
+```
 
-  available_power:
-    3200
+Global diagnostic attributes (exposed on each entity or a future hub entity) may include power guard details when enabled:
 
-  required_power:
-    1400
+```yaml
+power_guard_strategy: ellevio
+power_guard_peak_average: 8.4    # kW, calculated peak average for billing period
+power_guard_headroom: 1.6        # kW, margin before load would affect peak ranking
+power_guard_billing_period: "2026-07"
+```
 
-  price_state:
-    LOW
+When `state` is `OFF` but a future allowed window exists:
 
-  grid_state:
-    NORMAL
-
-  priority:
-    5
+```yaml
+state: OFF
+energy_mode: GRID_CHEAP
+reason: not_cheap_yet
+reason_text: "Current price above cheap threshold"
+next_opportunity: "2026-07-15T02:00:00+02:00"
 ```
 
 ---
 
-# 6. Energikällor
+## 6. Energy Sources
 
-Integrationens beslut baseras på energikällor.
-
-Möjliga states:
+The integration selects among these energy modes:
 
 ```
 SOLAR
@@ -173,476 +190,545 @@ GRID_EXPENSIVE
 BLOCKED
 ```
 
----
-
-## SOLAR
-
-Används när:
-
-* solöverskott finns
-* överskottet räcker för lasten
-* försäljning av el inte är mer attraktiv än egen användning
-
-Exempel:
-
-Last:
-
-```
-VVB:
-2200 W
-```
-
-Solöverskott:
-
-```
-3500 W
-```
-
-Exportpris:
-
-```
-5 öre/kWh
-```
-
-Regel:
-
-```
-Exportpris < 20 öre/kWh
-```
-
-Resultat:
-
-```
-energy_mode = SOLAR
-```
+| Mode | When |
+|---|---|
+| **SOLAR** | Grid output covers the load; self-consumption is more attractive than export |
+| **GRID_FREE** | Grid price at or below the configured free threshold |
+| **GRID_CHEAP** | Grid price below the configured cheap threshold |
+| **GRID_NORMAL** | Grid price within normal range |
+| **GRID_EXPENSIVE** | Grid price above the expensive threshold; load rules disallow or defer |
+| **BLOCKED** | Hard stop (power guard critical, override, or no allowed source) |
 
 ---
 
-# 7. Global konfiguration
+## 7. Global Configuration
 
-Konfigureras via Config Flow.
+Configured via Config Flow. One config entry holds global settings; individual loads are added through an Options Flow.
+
+### 7.1 Architecture
+
+```
+Config Entry (global)
+├── price sensor
+├── grid input sensor (W)
+├── grid output sensor (W)
+├── export price source
+├── power guard strategy + settings
+├── price thresholds
+└── Options Flow: "Add load" (repeatable)
+    └── per load: name, required power, allowed sources, rules
+```
+
+A **DataUpdateCoordinator** maintains shared global state (price timeline, grid input/output, power guard state) and triggers per-entity recalculation when inputs change.
+
+### 7.2 Spot Price
+
+**Source:** any sensor providing current and upcoming spot prices.
+
+The integration must not hard-code a specific price integration. Examples in documentation: Nord Pool, Tibber, Amber, Octopus Agile, etc.
+
+Configuration:
+
+* price sensor entity
+* currency / unit (from sensor or user override)
+* threshold rules (absolute and/or relative to rolling average)
+
+Price levels (user-configurable):
+
+| Level | Example rule |
+|---|---|
+| Free grid | spot price ≤ 2 (currency unit)/kWh |
+| Cheap grid | spot price < 30 % of rolling weekly average |
+| Expensive grid | spot price > 150 % of rolling weekly average |
+
+The decision engine evaluates **all available price data** from the sensor — typically today's and tomorrow's hourly prices once published (day-ahead markets usually publish next-day prices around midday).
+
+A **PriceProvider** adapter normalizes sensor state and attributes into a uniform timeline:
+
+```
+List[PriceSlot(datetime, price)]
+```
+
+Unsupported sensor formats must fail validation in Config Flow with a clear error message.
+
+### 7.3 Grid Input / Output
+
+The integration does **not** use solar production or house consumption sensors. What matters is the net exchange with the grid:
+
+```
+grid_input_sensor    # W, power drawn from the grid (import)
+grid_output_sensor   # W, power exported to the grid (export/sale)
+```
+
+These are typically provided by the energy meter or inverter integration as separate sensors, or derived from a bidirectional grid power sensor.
+
+**Self-consumption opportunity** is determined by grid output — if the house is exporting, that exported power could be consumed locally instead:
+
+```
+available_power = grid_output   (when grid_output > 0, else 0)
+```
+
+Example:
+
+```
+grid_input:  0 W
+grid_output: 3200 W   → 3200 W available for self-consumption
+```
+
+When `grid_input > 0`, the house is importing from the grid. The SOLAR energy mode is not available unless `grid_output` also covers the load requirement (some setups may report both; the export check takes precedence for SOLAR).
+
+Grid input is also the source for power guard evaluation and future hourly peak aggregation (see §7.5). One sensor serves both purposes — no separate import sensor is needed.
+
+Grid import/export is evaluated at the current moment. Weather or solar *forecast* is out of scope for MVP.
+
+### 7.4 Export Price
+
+Configured separately. Either:
+
+* a dedicated `selling_price_sensor`, or
+* a formula based on spot price + fixed compensation
+
+Used to decide whether self-consumption is more attractive than export.
+
+Example rule:
+
+```
+If export price < 20 (currency unit)/kWh → prefer self-consumption (SOLAR)
+```
+
+### 7.5 Power Guard (Optional)
+
+Power guard protects against costly **capacity tariff peaks** (effekttoppar). This is not a simple instantaneous threshold problem — rules vary by grid operator (DSO) and typically require **hourly aggregation** of grid import over the billing month.
+
+The integration uses a single input sensor and handles aggregation internally. A separate Utility Meter or external hourly statistics sensor is **not** required.
+
+#### Input Sensor
+
+```
+grid_input_sensor   # W, instantaneous grid import — also used for power guard
+```
+
+The integration reads `grid_input_sensor` continuously and **aggregates import power into hourly slots** itself. Persisted hourly history (via HA `Store` or equivalent) enables DSO-specific peak calculations across the billing period.
+
+`grid_output_sensor` is used for self-consumption decisions (§7.3) but is not aggregated for power guard.
+
+```
+HourlySlot(datetime hour_start, average_power_w, billing_weight)
+```
+
+The integration is responsible for:
+
+* sampling the import power sensor
+* computing hourly averages
+* persisting history for the current billing period
+* applying DSO-specific weighting rules (e.g. night discount)
+
+#### Architecture: Pluggable Strategies
+
+Power guard logic must not be hard-coded. The decision engine consumes a normalized result; strategy-specific calculation is isolated in a **PowerGuardProvider** with pluggable strategies — the same pattern as `PriceProvider`.
+
+```mermaid
+flowchart LR
+    INPUT[grid_input_sensor] --> AGG[Hourly aggregator + persistence]
+    AGG --> STRAT[PowerGuardStrategy]
+    STRAT --> STATE[PowerGuardState]
+    STATE --> ENGINE[Decision engine]
+```
+
+```python
+@dataclass
+class PowerGuardState:
+    state: str                        # NORMAL | WARNING | CRITICAL
+    strategy: str
+    current_peak_average: float | None   # kW, billing-period peak average (DSO strategies)
+    headroom: float | None               # kWh or kW margin depending on strategy
+    current_import_power: float | None   # W, latest grid input reading
+    current_hour_kwh: float | None      # kWh consumed this clock hour
+    projected_hour_kwh: float | None     # kWh projected total for this hour
+    hourly_limit_kwh: float | None      # configured limit (simple_threshold)
+    billing_period: str | None           # e.g. "2026-07"
+    reason: str
+    reason_text: str
+```
+
+The decision engine reads only `PowerGuardState.state` (and optionally `headroom` for WARNING). It does not know Ellevio rules or any other DSO logic.
+
+#### Strategies
+
+| Strategy | Scope | Description |
+|---|---|---|
+| `none` | Default | Power guard disabled |
+| `simple_threshold` | MVP | Hourly import limit (kWh). WARNING if projected hour total exceeds limit; CRITICAL if already consumed. |
+| `ellevio` | Future | Ellevio effektabonnemang rules (see below) |
+| `<dso_id>` | Future | Additional grid operators as separate strategy modules |
+
+Config Flow selects the strategy. Each strategy may expose its own settings (billing period start, night window, subscribed capacity, etc.).
+
+#### MVP: `simple_threshold`
+
+Uses hourly aggregation of `grid_input_sensor` to enforce a **maximum import per clock hour** (kWh).
+
+Configuration:
+
+```
+power_guard_hourly_limit_kwh: 2.0
+```
+
+| grid_state | Condition |
+|---|---|
+| NORMAL | Consumed and projected hour total ≤ limit |
+| WARNING | Consumed < limit, but current import rate projects above limit for the hour |
+| CRITICAL | Consumed ≥ limit → force `state: OFF`, `reason: power_guard` |
+
+Example with a 2 kWh/h limit at 10:30:
+
+```
+Consumed this hour:     1.0 kWh
+Current import power:   3000 W
+Remaining in hour:      30 min
+Projected total:        1.0 + 3.0 × 0.5 = 2.5 kWh  → WARNING
+
+Consumed this hour:     2.0 kWh
+→ CRITICAL (regardless of current power)
+```
+
+Projection assumes the current import power continues for the remainder of the hour. The same hourly aggregation pipeline is reused for future DSO strategies.
+
+#### Future Example: Ellevio
+
+Ellevio calculates the billing-period peak as the **average of the three highest hourly peaks**, where each peak must come from a **different day** within the current month.
+
+Additionally, consumption during **night hours** counts at **50 %** toward the hourly peak value.
+
+Example (simplified):
+
+```
+Day 3  18:00–19:00   10.0 kW average import → weighted 10.0 kW (day)
+Day 8  07:00–08:00    9.2 kW average import → weighted  9.2 kW (day)
+Day 12 17:00–18:00    7.5 kW average import → weighted  7.5 kW (day)
+Day 15 22:00–23:00    8.0 kW average import → weighted  4.0 kW (night × 0.5)
+
+Top 3 from distinct days (ranked by weighted value): 10.0, 9.2, 7.5
+Peak average = (10.0 + 9.2 + 7.5) / 3 = 8.9 kW
+```
+
+Day 15 does not qualify despite a raw hourly average of 8.0 kW, because the night weighting reduces its billed peak to 4.0 kW.
+
+The `ellevio` strategy must:
+
+1. Aggregate `grid_input_sensor` into hourly averages
+2. Apply night weighting (night window configured per strategy, e.g. 22:00–06:00)
+3. Track daily peak candidates for the billing month
+4. Select the three highest from distinct days
+5. Compute the peak average
+6. Estimate whether activating a load (`required_power`) would push the **current hour** into top-3 contention
+7. Return `PowerGuardState` with `headroom` for WARNING and CRITICAL when a load would likely raise the peak average
+
+Night weighting example:
+
+```
+hourly_average = 8000 W during night window
+billing_weight = 0.5
+weighted_peak  = 8000 × 0.5 = 4000 W
+```
+
+#### grid_state Semantics
+
+| grid_state | Effect |
+|---|---|
+| NORMAL | No restriction from power guard |
+| WARNING | Load may push current hour toward peak ranking; exposed as attribute with `headroom`. Automations may reduce load. |
+| CRITICAL | Activating load would likely worsen peak average, or subscribed capacity exceeded → force `state: OFF`, `reason: power_guard` |
+
+Power guard has the highest priority in the decision chain.
+
+#### Design Constraints
+
+* **One import sensor** — `grid_input_sensor` is the single source of truth for import and power guard aggregation.
+* **No Utility Meter dependency** — avoids coupling to HA meter configuration and reset cycles.
+* **Persisted history** — required for DSO strategies; scoped to current billing period with automatic rollover.
+* **Testable core** — hourly aggregation and each strategy must be unit-testable without Home Assistant.
 
 ---
 
-# 7.1 Elpris
+## 8. Adding a Load
 
-Källa:
+Added via Options Flow in the UI.
 
-Nord Pool integration.
+### Name
 
-Konfiguration:
+Example: `Basement dehumidifier`
 
-* elområde
-* pris-sensor
+### Required Power
 
-Prisnivåer:
+Example: `1400 W`
 
-## Gratis nätel
+The load is considered runnable in SOLAR mode only when current grid output ≥ required power.
 
-Exempel:
+### Allowed Sources
 
-```
-spotpris <= 2 öre/kWh
-```
-
-## Billig nätel
-
-Exempel:
-
-```
-spotpris < 30 % av rullande veckomedel
-```
-
-## Dyr nätel
-
-Exempel:
-
-```
-spotpris > 150 % av rullande veckomedel
-```
+Rules describing which energy sources the load may use (see §9).
 
 ---
 
-# 7.2 Solel
+## 9. Load Rules
 
-Användaren anger:
+Rules describe which energy sources a load is permitted to use.
 
-```
-solar_production_sensor
-
-house_consumption_sensor
-```
-
-Integration räknar:
-
-```
-solar_surplus =
-produktion - förbrukning
-```
-
-Exempel:
-
-```
-5000 W produktion
--
-2000 W förbrukning
-
-=
-3000 W överskott
-```
-
----
-
-# 7.3 Exportpris
-
-Konfigureras separat.
-
-Exempel:
-
-```
-selling_price_sensor
-```
-
-eller:
-
-```
-spotpris + fast ersättning
-```
-
-Används för att avgöra om egenanvändning är bättre än försäljning.
-
----
-
-# 7.4 Effektvakt
-
-Valfri funktion.
-
-Input:
-
-Antingen:
-
-```
-grid_power_sensor
-```
-
-eller nätbolagsintegration.
-
-Tillstånd:
-
-```
-NORMAL
-WARNING
-CRITICAL
-```
-
-Effektvakt har högsta prioritet.
-
----
-
-# 8. Skapa Energy Load
-
-Via GUI.
-
-## Namn
-
-Exempel:
-
-```
-Källaravfuktare
-```
-
-## Effektbehov
-
-Exempel:
-
-```
-1400 W
-```
-
-## Prioritet
-
-1-10
-
-Lägre prioritet stoppas först.
-
----
-
-# 9. Lastregler
-
-Reglerna beskriver vilka energikällor lasten får använda.
-
-Exempel:
-
-## Avfuktare
+Example — dehumidifier:
 
 ```yaml
 power:
   required: 1400
 
-priority:
-  5
-
 allowed_sources:
-
   solar:
     enabled: true
-
-    minimum_surplus:
-      1400
-
-    max_export_price:
-      20
-
+    max_export_price: 20
 
   grid_cheap:
-    enabled:
-      true
-
+    enabled: true
 
   grid_expensive:
-    enabled:
-      false
-
+    enabled: false
 
 runtime:
-
-  minimum_minutes_per_day:
-    180
+  minimum_minutes_per_day: 180
+  minimum_minutes_per_week: 600
 ```
+
+When runtime minutes are not yet satisfied, the engine selects the **cheapest allowed hours** in the remaining period (rest of day or ISO week) and recommends `ON` during those hours. Otherwise `OFF` with `next_opportunity` set to the next selected hour. `required_power` is used for SOLAR/export checks — no separate minimum export setting.
 
 ---
 
-# 10. Beslutsmotor
+## 10. Decision Engine
 
-Regler körs i prioriterad ordning.
+Rules are evaluated in priority order. The engine scans the full price timeline when grid sources are considered.
 
-## Prioritet
+### Priority Chain
 
 ```
-1. Effektvakt
-2. Manuella overrides
-3. Lastprioritering
-4. SOLAR-värdering
-5. GRID_CHEAP
-6. GRID_NORMAL
-7. Komfortkrav
+1. Power guard (CRITICAL → OFF)
+2. Manual overrides
+3. SOLAR evaluation (grid output ≥ required power, export price rule)
+4. GRID_FREE / GRID_CHEAP / GRID_NORMAL (current hour, then full timeline for next_opportunity)
+5. Runtime requirement (cheapest allowed hours if daily/weekly minimum not met)
+6. Default OFF with reason
 ```
+
+Load prioritization between multiple entities is **not** implemented.
+
+### Evaluation Logic
+
+For each entity on each recalculation:
+
+1. Read global state (grid input/output, price timeline, power guard state, export price)
+2. Apply power guard (`PowerGuardState.state == CRITICAL` → OFF) and overrides
+3. Check SOLAR: grid output ≥ required power and export price rule satisfied → `ON` / `SOLAR`
+4. Check current hour against allowed grid sources → `ON` with matching `energy_mode`
+5. If no match now, scan price timeline for the first future hour matching an allowed source → `OFF` with `next_opportunity` set
+6. If no allowed source exists in the timeline → `OFF` with appropriate `reason`
+
+### Recalculation Triggers
+
+* State change on any input sensor (price, grid input, grid output, export price)
+* Periodic refresh (configurable interval, e.g. every 1–5 minutes)
+* `energy_dispatcher.recalculate` service
+
+Input changes should be debounced to avoid excessive recalculation.
 
 ---
 
-# 11. Exempel: Avfuktare
+## 11. Example: Dehumidifier
+
+### Scenario A — grid export (self-consumption)
 
 Input:
 
 ```
-Solöverskott:
-2500 W
-
-Avfuktare:
-1400 W
-
-Exportpris:
-5 öre
+Grid output: 2500 W
+Load:        1400 W
+Export price: 5 (currency unit)/kWh
 ```
 
-Resultat:
+Result:
 
 ```
-energy_load.avfuktare
-
-state:
-ON
-
-energy_mode:
-SOLAR
+energy_dispatcher.dehumidifier
+  state: ON
+  energy_mode: SOLAR
 ```
 
-Automation:
+Automation sets target humidity to 50 %.
+
+### Scenario B — cheap grid
+
+Input:
 
 ```
-SOLAR:
-börvärde 50 %
-
+Grid output: 0 W
+Current price: cheap (below threshold)
 ```
 
----
-
-Nästa scenario:
+Result:
 
 ```
-Solöverskott:
-0 W
-
-Elpris:
-20 öre
-
+state: ON
+energy_mode: GRID_CHEAP
 ```
 
-Resultat:
+Automation sets target humidity to 65 %.
+
+### Scenario C — not cheap yet
+
+Input:
 
 ```
-state:
-ON
-
-energy_mode:
-GRID_CHEAP
+Grid output: 0 W
+Current price: normal
+Next cheap hour: 02:00 tomorrow
+Load rules: grid_cheap enabled, grid_expensive disabled
 ```
 
-Automation:
+Result:
 
 ```
-GRID_CHEAP:
-börvärde 65 %
+state: OFF
+energy_mode: GRID_CHEAP
+reason: not_cheap_yet
+next_opportunity: "2026-07-16T02:00:00+02:00"
 ```
 
 ---
 
-# 12. Services
+## 12. Services
 
-## Override
+### Override
 
 ```
-energy_load.override
+energy_dispatcher.override
 ```
 
-Exempel:
+Force a run decision for a specified duration.
 
 ```yaml
-entity_id:
-  energy_load.vvb
+entity_id: energy_dispatcher.water_heater
+mode: force_on
+duration: "2h"
+```
 
-mode:
-  force_on
+### Clear Override
 
-duration:
-  2h
+```
+energy_dispatcher.clear_override
+```
+
+### Recalculate
+
+```
+energy_dispatcher.recalculate
+```
+
+Force immediate recalculation of one or all entities.
+
+---
+
+## 13. Event Log
+
+All state transitions and decisions should be logged for transparency and debugging.
+
+Example:
+
+```
+10:32  Dehumidifier: OFF → ON
+  Reason:     SOLAR (grid export)
+  Export:     3200 W
+  Load:       1400 W
+  Export:     4 (currency unit)/kWh
 ```
 
 ---
 
-## Clear override
+## 14. Future Considerations
 
-```
-energy_load.clear_override
-```
+These are explicitly **out of scope** for MVP. Listed here for direction only.
 
----
+### DSO-Specific Power Guard Strategies
 
-## Recalculate
+Real capacity tariff support beyond the MVP `simple_threshold` placeholder. The first targeted strategy is **Ellevio** (top-3 hourly peaks from distinct days, night weighting at 50 %). Additional grid operators added as separate `PowerGuardStrategy` modules sharing the same hourly aggregation pipeline.
 
-```
-energy_load.recalculate
-```
+See §7.5 for architecture. Implementation requires persisted hourly import data and billing-period tracking — already designed for, not yet built.
 
----
+### Global Load Balancing
 
-# 13. Eventlogg
+Allocate limited export capacity across multiple loads. Requires prioritization or reservation logic that MVP deliberately avoids.
 
-Alla beslut ska loggas.
+### Weather / Solar Forecast
 
-Exempel:
+Defer loads based on predicted production (e.g. "sun expected in 2 hours"). Distinct from day-ahead price data, which is already available from the price sensor.
 
-```
-10:32
+### Statistics
 
-Avfuktare:
+Track increased self-consumption, cost savings, avoided power peaks, and runtime per energy source.
 
-OFF -> ON
+### Grid Operator API Integrations
 
-Reason:
-SOLAR
-
-Solar surplus:
-3200 W
-
-Load:
-1400 W
-
-Export price:
-4 öre
-```
+Direct integration with DSO APIs (beyond the import power sensor + internal aggregation model). Only needed if sensor-based aggregation is insufficient for a given operator.
 
 ---
 
-# 14. Framtida funktioner
+## 15. MVP Scope
 
-## Automatisk lastbalansering
+### In Scope
 
-Tillgänglig effekt:
+1. Custom component with domain `energy_dispatcher`
+2. Config Flow (global) + Options Flow (per load)
+3. Generic price sensor via PriceProvider adapter
+4. Full price timeline evaluation (today + tomorrow when available)
+5. Grid input + grid output sensors
+6. Export price (sensor or calculated)
+7. Optional power guard via `simple_threshold` strategy on grid input
+8. Decision engine (local per entity, unit-tested)
+9. Entity states: `ON | OFF` with rich attributes
+10. Services: override, clear_override, recalculate
+11. Decision event log
+12. `PowerGuardState` model and strategy interface (Ellevio aggregation not implemented)
+13. Runtime tracking with cheapest-hour scheduling (daily/weekly minimum minutes)
 
-```
-4000 W
-```
+### Out of Scope
 
-Laster:
+* Load prioritization and global capacity allocation
+* `WAITING` and `LIMITED` entity states
+* Weather / solar forecast control
+* Statistics and dashboards
+* DSO-specific power guard strategies (Ellevio top-3, night weighting, billing-period tracking)
+* Hourly import aggregation and persisted peak history
+* Grid operator API integrations
+* Hard-coded dependency on any specific price integration
 
-```
-VVB       2200 W
-Avfuktare 1400 W
-Elbil     3000 W
-```
-
-Prioritet avgör:
-
-```
-VVB + Avfuktare körs
-Elbil väntar
-```
-
----
-
-## Prognosstyrning
-
-Exempel:
-
-```
-Sol väntas om 2 timmar
-```
-
-Integration kan skjuta på lågprioritetslaster.
-
----
-
-## Statistik
-
-Mät:
-
-* ökad egenanvändning av solel
-* sparad kostnad
-* undvikna effekttoppar
-* körtid per energikälla
-
----
-
-# 15. MVP Implementation
-
-Första version:
-
-1. Custom component
-2. Ny domän `energy_load`
-3. Config Flow
-4. Nord Pool integration
-5. Solproduktion + förbrukning
-6. Exportpris
-7. Effektvakt
-8. Decision engine
-9. Energy load entity
-
-Exempel automation:
+### Example Automation
 
 ```yaml
 trigger:
-  state:
-    entity_id:
-      energy_load.avfuktare
-
-condition:
-  state:
-    SOLAR
+  - platform: state
+    entity_id: energy_dispatcher.dehumidifier
 
 action:
-  set humidity:
-    50
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ state_attr('energy_dispatcher.dehumidifier', 'energy_mode') == 'SOLAR' }}"
+        sequence:
+          - service: humidifier.set_humidity
+            data:
+              humidity: 50
+      - conditions:
+          - condition: template
+            value_template: "{{ state_attr('energy_dispatcher.dehumidifier', 'energy_mode') == 'GRID_CHEAP' }}"
+        sequence:
+          - service: humidifier.set_humidity
+            data:
+              humidity: 65
 ```
 
-All energilogik ska vara kapslad i integrationen.
+All energy logic must remain encapsulated in the integration.

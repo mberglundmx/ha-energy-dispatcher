@@ -1,0 +1,45 @@
+override:
+  name: Override
+  description: Force a load run decision for a specified duration.
+  fields:
+    entity_id:
+      name: Entity
+      description: Energy Dispatcher entity to override.
+      selector:
+        entity:
+          domain: energy_dispatcher
+    mode:
+      name: Mode
+      description: Force ON or OFF.
+      selector:
+        select:
+          options:
+            - force_on
+            - force_off
+    duration:
+      name: Duration
+      description: How long the override should remain active.
+      selector:
+        duration: {}
+
+clear_override:
+  name: Clear override
+  description: Clear an active manual override.
+  fields:
+    entity_id:
+      name: Entity
+      description: Energy Dispatcher entity to clear.
+      selector:
+        entity:
+          domain: energy_dispatcher
+
+recalculate:
+  name: Recalculate
+  description: Force an immediate decision recalculation.
+  fields:
+    entity_id:
+      name: Entity
+      description: Energy Dispatcher entities to recalculate.
+      selector:
+        entity:
+          domain: energy_dispatcher

@@ -1,0 +1,70 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Energy Dispatcher",
+        "description": "Configure global energy inputs and thresholds.",
+        "data": {
+          "price_sensor": "Spot price sensor",
+          "grid_input_sensor": "Grid input sensor (W)",
+          "grid_output_sensor": "Grid output sensor (W)",
+          "export_price_sensor": "Export price sensor",
+          "export_price_offset": "Export price offset (spot + offset)",
+          "power_guard_strategy": "Power guard strategy",
+          "power_guard_hourly_limit_kwh": "Hourly import limit (kWh)",
+          "price_free_threshold": "Free grid price threshold",
+          "price_cheap_ratio": "Cheap price ratio of rolling average",
+          "price_expensive_ratio": "Expensive price ratio of rolling average"
+        }
+      }
+    },
+    "error": {
+      "export_price_required": "Provide an export price sensor or offset."
+    },
+    "abort": {
+      "already_configured": "Energy Dispatcher is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Manage loads",
+        "data": {
+          "action": "Action"
+        }
+      },
+      "add_load": {
+        "title": "Add load",
+        "data": {
+          "name": "Name",
+          "required_power": "Required power (W)",
+          "solar_enabled": "Prefer self-consumption over export",
+          "solar_max_export_price": "Maximum export price",
+          "minimum_minutes_per_day": "Minimum minutes per day",
+          "minimum_minutes_per_week": "Minimum minutes per week",
+          "grid_free_enabled": "Allow free grid",
+          "grid_cheap_enabled": "Allow cheap grid",
+          "grid_normal_enabled": "Allow normal grid",
+          "grid_expensive_enabled": "Allow expensive grid"
+        }
+      },
+      "remove_load": {
+        "title": "Remove load",
+        "data": {
+          "load_id": "Load"
+        }
+      }
+    },
+    "error": {
+      "load_exists": "A load with this name already exists."
+    }
+  },
+  "selector": {
+    "power_guard_strategy": {
+      "options": {
+        "none": "Disabled",
+        "simple_threshold": "Simple threshold (MVP)"
+      }
+    }
+  }
+}

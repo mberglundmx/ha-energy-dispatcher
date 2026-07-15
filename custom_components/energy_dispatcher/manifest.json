@@ -1,0 +1,12 @@
+{
+  "domain": "energy_dispatcher",
+  "name": "Energy Dispatcher",
+  "codeowners": ["@mberglundmx"],
+  "config_flow": true,
+  "documentation": "https://github.com/mberglundmx/ha-energy-dispatcher",
+  "integration_type": "hub",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/mberglundmx/ha-energy-dispatcher/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}
