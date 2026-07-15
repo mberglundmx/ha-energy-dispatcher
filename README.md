@@ -53,6 +53,8 @@ Copy `custom_components/energy_dispatcher/` to your Home Assistant `config/custo
 
 ### Global setup (config flow)
 
+Open **Settings → Devices & services → Energy Dispatcher → Configure** to change hub settings (sensors, export compensation, power guard, price thresholds).
+
 | Setting | Required | Description |
 |---|---|---|
 | Spot price sensor | Yes | Any sensor with current and upcoming hourly prices |

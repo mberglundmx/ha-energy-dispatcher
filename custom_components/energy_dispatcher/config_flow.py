@@ -172,6 +172,21 @@ class EnergyDispatcherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(step_id="user", data_schema=STEP_USER_SCHEMA)
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Reconfigure global hub settings."""
+        entry = self._get_reconfigure_entry()
+        if user_input is not None:
+            return self.async_update_reload_and_abort(entry, data=user_input)
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.add_suggested_values_to_schema(
+                STEP_USER_SCHEMA, dict(entry.data)
+            ),
+        )
+
 
 class LoadSubentryFlowHandler(ConfigSubentryFlow):
     """Handle subentry flow for adding and modifying loads."""

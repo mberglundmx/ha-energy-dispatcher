@@ -26,10 +26,37 @@
           "price_cheap_ratio": "Spotpris under denna andel av rullande veckosnitt = billigt nät (GRID_CHEAP). Exempel: 0,30 = 30 % av snittet.",
           "price_expensive_ratio": "Spotpris över denna andel av rullande veckosnitt = dyrt nät (GRID_EXPENSIVE). Exempel: 1,50 = 150 % av snittet."
         }
+      },
+      "reconfigure": {
+        "title": "Konfigurera Energy Dispatcher",
+        "description": "Uppdatera globala sensorer, exportersättning, effektbevakning och pristersklar.",
+        "data": {
+          "price_sensor": "Spotprissensor",
+          "grid_input_sensor": "Nätimport (W)",
+          "grid_output_sensor": "Nätexport (W)",
+          "export_price_offset": "Exportersättning (fast)",
+          "power_guard_strategy": "Effektbevakning",
+          "power_guard_hourly_limit_kwh": "Timlig importgräns (kWh)",
+          "price_free_threshold": "Gratis nät-tröskel",
+          "price_cheap_ratio": "Billigt nät-kvot",
+          "price_expensive_ratio": "Dyrt nät-kvot"
+        },
+        "data_description": {
+          "price_sensor": "Sensor med aktuella och kommande spotpriser (idag och imorgon om tillgängligt). Exempel: Nord Pool, Tibber, Amber.",
+          "grid_input_sensor": "Momentan effekt från nätet i watt (W). Används för effektbevakning och importspårning.",
+          "grid_output_sensor": "Momentan effekt till nätet i watt (W). När värdet är över noll kan egenförbrukning (SOLAR-läge) rekommenderas.",
+          "export_price_offset": "Fast ersättning som läggs till aktuellt spotpris för att uppskatta exportintäkt per kWh. Exempel: spot 0,50 + ersättning 0,20 = exportpris 0,70. Samma enhet som prissensorn.",
+          "power_guard_strategy": "Valfritt skydd mot hög nätimport. Inaktiverad = ingen gräns. Enkel tröskel = max kWh per klocktimme.",
+          "power_guard_hourly_limit_kwh": "Maximal nätimport per klocktimme när effektbevakning är aktiverad. Exempel: 2,0 = 2 kWh/h.",
+          "price_free_threshold": "Spotpriser på eller under detta värde behandlas som gratis nät (GRID_FREE). Samma enhet som prissensorn.",
+          "price_cheap_ratio": "Spotpris under denna andel av rullande veckosnitt = billigt nät (GRID_CHEAP). Exempel: 0,30 = 30 % av snittet.",
+          "price_expensive_ratio": "Spotpris över denna andel av rullande veckosnitt = dyrt nät (GRID_EXPENSIVE). Exempel: 1,50 = 150 % av snittet."
+        }
       }
     },
     "abort": {
-      "already_configured": "Energy Dispatcher är redan konfigurerad."
+      "already_configured": "Energy Dispatcher är redan konfigurerad.",
+      "reconfigure_successful": "Hubinställningarna har uppdaterats."
     }
   },
   "config_subentries": {

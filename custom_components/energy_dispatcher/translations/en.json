@@ -26,10 +26,37 @@
           "price_cheap_ratio": "Spot price below this fraction of the rolling weekly average is cheap grid (GRID_CHEAP). Example: 0.30 = 30 % of average.",
           "price_expensive_ratio": "Spot price above this fraction of the rolling weekly average is expensive grid (GRID_EXPENSIVE). Example: 1.50 = 150 % of average."
         }
+      },
+      "reconfigure": {
+        "title": "Configure Energy Dispatcher",
+        "description": "Update global sensors, export compensation, power guard, and price thresholds.",
+        "data": {
+          "price_sensor": "Spot price sensor",
+          "grid_input_sensor": "Grid input (W)",
+          "grid_output_sensor": "Grid output (W)",
+          "export_price_offset": "Export compensation (fixed)",
+          "power_guard_strategy": "Power guard",
+          "power_guard_hourly_limit_kwh": "Hourly import limit (kWh)",
+          "price_free_threshold": "Free grid threshold",
+          "price_cheap_ratio": "Cheap grid ratio",
+          "price_expensive_ratio": "Expensive grid ratio"
+        },
+        "data_description": {
+          "price_sensor": "Sensor with current and upcoming spot prices (today and tomorrow when available). Examples: Nord Pool, Tibber, Amber.",
+          "grid_input_sensor": "Instantaneous power drawn from the grid in watts (W). Used for power guard and import tracking.",
+          "grid_output_sensor": "Instantaneous power exported to the grid in watts (W). When above zero, self-consumption (SOLAR mode) may be recommended.",
+          "export_price_offset": "Fixed compensation added to the current spot price to estimate export revenue per kWh. Example: if spot is 0.50 and compensation is 0.20, export price is 0.70. Same unit as your price sensor.",
+          "power_guard_strategy": "Optional protection against high grid import. Disabled = no limit. Simple threshold = max kWh per clock hour.",
+          "power_guard_hourly_limit_kwh": "Maximum grid import energy allowed per clock hour when power guard is enabled. Example: 2.0 = 2 kWh/h.",
+          "price_free_threshold": "Spot prices at or below this absolute value are treated as free grid (GRID_FREE). Same unit as your price sensor.",
+          "price_cheap_ratio": "Spot price below this fraction of the rolling weekly average is cheap grid (GRID_CHEAP). Example: 0.30 = 30 % of average.",
+          "price_expensive_ratio": "Spot price above this fraction of the rolling weekly average is expensive grid (GRID_EXPENSIVE). Example: 1.50 = 150 % of average."
+        }
       }
     },
     "abort": {
-      "already_configured": "Energy Dispatcher is already configured."
+      "already_configured": "Energy Dispatcher is already configured.",
+      "reconfigure_successful": "Hub settings updated successfully."
     }
   },
   "config_subentries": {
