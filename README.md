@@ -62,17 +62,10 @@ Copy `custom_components/energy_dispatcher/` to your Home Assistant `config/custo
 | Power guard strategy | No | Disabled (default) or simple hourly kWh limit |
 | Price thresholds | No | Free / cheap / expensive classification |
 
-### Per load (Configure → Add load)
+### Per load (integration page → Add load)
 
-| Setting | Description |
-|---|---|
-| Name | Display name; becomes the entity id |
-| Required power (W) | Load power requirement; used for export and SOLAR checks |
-| Prefer self-consumption | Allow `SOLAR` when grid output covers the load |
-| Maximum export price | Self-consume only when export price is below this |
-| Minimum minutes per day | Schedule cheapest allowed hours to meet daily runtime |
-| Minimum minutes per week | Same for ISO week |
-| Allowed grid sources | Free / cheap / normal / expensive |
+Open **Settings → Devices & services → Energy Dispatcher → your hub → Add load**.
+Each load becomes its own device with an `energy_dispatcher.*` entity.
 
 ## Entity output
 

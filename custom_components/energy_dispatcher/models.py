@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .power_guard import PowerGuardState
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigSubentry
 
 
 @dataclass(frozen=True)
@@ -118,8 +121,24 @@ def load_config_from_dict(data: dict[str, Any]) -> LoadConfig:
     )
 
 
+def load_config_from_subentry(subentry: ConfigSubentry) -> LoadConfig:
+    """Build a LoadConfig from a config subentry."""
+    data = dict(subentry.data)
+    data["load_id"] = subentry.unique_id or subentry.title
+    data["name"] = subentry.title
+    return load_config_from_dict(data)
+
+
+def load_config_to_subentry_data(config: LoadConfig) -> dict[str, Any]:
+    """Serialize load settings for storage in a config subentry."""
+    data = load_config_to_dict(config)
+    data.pop("load_id")
+    data.pop("name")
+    return data
+
+
 def load_config_to_dict(config: LoadConfig) -> dict[str, Any]:
-    """Serialize a LoadConfig for storage in config entry options."""
+    """Serialize a LoadConfig for storage."""
     return {
         "load_id": config.load_id,
         "name": config.name,

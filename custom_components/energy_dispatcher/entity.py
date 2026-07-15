@@ -43,18 +43,22 @@ class EnergyDispatcherEntity(CoordinatorEntity[EnergyDispatcherCoordinator], Ent
         self,
         coordinator: EnergyDispatcherCoordinator,
         load: LoadConfig,
+        subentry_id: str,
     ) -> None:
         super().__init__(coordinator)
         self._load = load
-        self._attr_unique_id = f"{coordinator.entry.entry_id}_{load.load_id}"
+        self._subentry_id = subentry_id
+        self._config_subentry_id = subentry_id
+        self._attr_unique_id = subentry_id
         self._attr_name = load.name
 
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.entry.entry_id, self._load.load_id)},
+            identifiers={(DOMAIN, self._subentry_id)},
             name=self._load.name,
             manufacturer="Energy Dispatcher",
+            via_device={(DOMAIN, self.coordinator.entry.entry_id)},
         )
 
     @property

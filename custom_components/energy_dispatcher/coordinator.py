@@ -18,7 +18,6 @@ from .const import (
     CONF_GRID_INPUT_SENSOR,
     CONF_GRID_OUTPUT_SENSOR,
     CONF_GRID_POWER_SENSOR,
-    CONF_LOADS,
     CONF_POWER_GUARD_HOURLY_LIMIT_KWH,
     CONF_POWER_GUARD_STRATEGY,
     CONF_PRICE_CHEAP_RATIO,
@@ -30,6 +29,7 @@ from .const import (
     POWER_GUARD_STRATEGY_NONE,
     POWER_GUARD_STRATEGY_SIMPLE_THRESHOLD,
     STATE_ON,
+    SUBENTRY_TYPE_LOAD,
 )
 from .decision_engine import evaluate_load
 from .hourly_aggregator import HourlyAggregator
@@ -39,7 +39,7 @@ from .models import (
     LoadRuntimeState,
     OverrideState,
     PriceThresholds,
-    load_config_from_dict,
+    load_config_from_subentry,
 )
 from .power_guard import PowerGuardConfig, evaluate_power_guard
 from .price_provider import PriceProvider
@@ -119,10 +119,11 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return {"global_state": data, "decisions": decisions}
 
     def _reload_loads(self) -> None:
-        loads_data = self.entry.options.get(CONF_LOADS, [])
         self.loads = {}
-        for item in loads_data:
-            load = load_config_from_dict(item)
+        for subentry in self.entry.subentries.values():
+            if subentry.subentry_type != SUBENTRY_TYPE_LOAD:
+                continue
+            load = load_config_from_subentry(subentry)
             self.loads[load.load_id] = load
             if load.load_id not in self.runtime:
                 self.runtime[load.load_id] = LoadRuntimeState()

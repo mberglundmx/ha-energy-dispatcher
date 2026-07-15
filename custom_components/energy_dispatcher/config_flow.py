@@ -8,6 +8,7 @@ import uuid
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigSubentryFlow, SubentryFlowResult
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 
@@ -15,9 +16,7 @@ from .const import (
     CONF_EXPORT_PRICE_OFFSET,
     CONF_GRID_INPUT_SENSOR,
     CONF_GRID_OUTPUT_SENSOR,
-    CONF_LOAD_ID,
     CONF_LOAD_NAME,
-    CONF_LOADS,
     CONF_POWER_GUARD_HOURLY_LIMIT_KWH,
     CONF_POWER_GUARD_STRATEGY,
     CONF_PRICE_CHEAP_RATIO,
@@ -33,8 +32,14 @@ from .const import (
     DOMAIN,
     POWER_GUARD_STRATEGY_NONE,
     POWER_GUARD_STRATEGY_SIMPLE_THRESHOLD,
+    SUBENTRY_TYPE_LOAD,
 )
-from .models import LoadConfig, SourceRules, load_config_to_dict
+from .models import (
+    LoadConfig,
+    SourceRules,
+    load_config_from_subentry,
+    load_config_to_subentry_data,
+)
 
 STEP_USER_SCHEMA = vol.Schema(
     {
@@ -147,7 +152,15 @@ LOAD_SCHEMA = vol.Schema(
 class EnergyDispatcherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Energy Dispatcher."""
 
-    VERSION = 1
+    VERSION = 2
+
+    @classmethod
+    @callback
+    def async_get_supported_subentry_types(
+        cls, config_entry: config_entries.ConfigEntry
+    ) -> dict[str, type[ConfigSubentryFlow]]:
+        """Return subentries supported by this integration."""
+        return {SUBENTRY_TYPE_LOAD: LoadSubentryFlowHandler}
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -160,101 +173,109 @@ class EnergyDispatcherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(step_id="user", data_schema=STEP_USER_SCHEMA)
 
 
-class EnergyDispatcherOptionsFlow(config_entries.OptionsFlow):
-    """Handle options flow for adding and removing loads."""
+class LoadSubentryFlowHandler(ConfigSubentryFlow):
+    """Handle subentry flow for adding and modifying loads."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
-
-    async def async_step_init(
+    async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> config_entries.ConfigFlowResult:
-        if user_input is not None:
-            if user_input["action"] == "add":
-                return await self.async_step_add_load()
-            return await self.async_step_remove_load()
+    ) -> SubentryFlowResult:
+        """Add a load subentry."""
+        return await self._async_step_load(user_input)
 
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema({vol.Required("action"): vol.In(["add", "remove"])}),
-        )
-
-    async def async_step_add_load(
+    async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
-    ) -> config_entries.ConfigFlowResult:
+    ) -> SubentryFlowResult:
+        """Reconfigure an existing load subentry."""
+        return await self._async_step_load(user_input, is_reconfigure=True)
+
+    async def _async_step_load(
+        self,
+        user_input: dict[str, Any] | None = None,
+        *,
+        is_reconfigure: bool = False,
+    ) -> SubentryFlowResult:
+        subentry = self._get_reconfigure_subentry() if is_reconfigure else None
+
         if user_input is not None:
             load_id = _slugify(user_input[CONF_LOAD_NAME])
-            if _load_id_exists(self.config_entry, load_id):
-                return self.async_show_form(
-                    step_id="add_load",
-                    data_schema=LOAD_SCHEMA,
-                    errors={"base": "load_exists"},
+            if is_reconfigure:
+                assert subentry is not None
+                if load_id != subentry.unique_id and _subentry_id_exists(
+                    self._get_entry(), load_id
+                ):
+                    return self.async_show_form(
+                        step_id="reconfigure" if is_reconfigure else "user",
+                        data_schema=LOAD_SCHEMA,
+                        errors={"base": "load_exists"},
+                    )
+                load = _load_from_user_input(user_input, subentry.unique_id or load_id)
+                return self.async_update_and_abort(
+                    self._get_entry(),
+                    subentry,
+                    title=user_input[CONF_LOAD_NAME],
+                    data=load_config_to_subentry_data(load),
                 )
 
-            load = LoadConfig(
-                load_id=load_id,
-                name=user_input[CONF_LOAD_NAME],
-                required_power=float(user_input[CONF_REQUIRED_POWER]),
-                minimum_minutes_per_day=_optional_int(user_input.get("minimum_minutes_per_day")),
-                minimum_minutes_per_week=_optional_int(user_input.get("minimum_minutes_per_week")),
-                sources=SourceRules(
-                    solar_enabled=user_input["solar_enabled"],
-                    solar_max_export_price=_optional_float(user_input.get("solar_max_export_price")),
-                    grid_free_enabled=user_input["grid_free_enabled"],
-                    grid_cheap_enabled=user_input["grid_cheap_enabled"],
-                    grid_normal_enabled=user_input["grid_normal_enabled"],
-                    grid_expensive_enabled=user_input["grid_expensive_enabled"],
-                ),
+            await self.async_set_unique_id(load_id)
+            self._abort_if_unique_id_configured()
+            load = _load_from_user_input(user_input, load_id)
+            return self.async_create_entry(
+                title=user_input[CONF_LOAD_NAME],
+                data=load_config_to_subentry_data(load),
             )
-            loads = list(self.config_entry.options.get(CONF_LOADS, []))
-            loads.append(load_config_to_dict(load))
-            options = dict(self.config_entry.options)
-            options[CONF_LOADS] = loads
-            return self.async_create_entry(title="", data=options)
 
-        return self.async_show_form(step_id="add_load", data_schema=LOAD_SCHEMA)
+        defaults: dict[str, Any] = {}
+        if subentry is not None:
+            load = load_config_from_subentry(subentry)
+            defaults = {
+                CONF_LOAD_NAME: load.name,
+                CONF_REQUIRED_POWER: load.required_power,
+                "solar_enabled": load.sources.solar_enabled,
+                "solar_max_export_price": load.sources.solar_max_export_price,
+                "minimum_minutes_per_day": load.minimum_minutes_per_day,
+                "minimum_minutes_per_week": load.minimum_minutes_per_week,
+                "grid_free_enabled": load.sources.grid_free_enabled,
+                "grid_cheap_enabled": load.sources.grid_cheap_enabled,
+                "grid_normal_enabled": load.sources.grid_normal_enabled,
+                "grid_expensive_enabled": load.sources.grid_expensive_enabled,
+            }
 
-    async def async_step_remove_load(
-        self, user_input: dict[str, Any] | None = None
-    ) -> config_entries.ConfigFlowResult:
-        loads = self.config_entry.options.get(CONF_LOADS, [])
-        if not loads:
-            return self.async_create_entry(title="", data={CONF_LOADS: []})
-
-        if user_input is not None:
-            load_id = user_input[CONF_LOAD_ID]
-            loads = [load for load in loads if load.get(CONF_LOAD_ID) != load_id]
-            options = dict(self.config_entry.options)
-            options[CONF_LOADS] = loads
-            return self.async_create_entry(title="", data=options)
-
-        options = {
-            load.get(CONF_LOAD_NAME, load.get(CONF_LOAD_ID)): load.get(CONF_LOAD_ID)
-            for load in loads
-        }
+        step_id = "reconfigure" if is_reconfigure else "user"
         return self.async_show_form(
-            step_id="remove_load",
-            data_schema=vol.Schema({vol.Required(CONF_LOAD_ID): vol.In(options)}),
+            step_id=step_id,
+            data_schema=self.add_suggested_values_to_schema(LOAD_SCHEMA, defaults),
         )
 
 
-@callback
-def async_get_options_flow(
-    config_entry: config_entries.ConfigEntry,
-) -> EnergyDispatcherOptionsFlow:
-    return EnergyDispatcherOptionsFlow(config_entry)
+def _load_from_user_input(user_input: dict[str, Any], load_id: str) -> LoadConfig:
+    return LoadConfig(
+        load_id=load_id,
+        name=user_input[CONF_LOAD_NAME],
+        required_power=float(user_input[CONF_REQUIRED_POWER]),
+        minimum_minutes_per_day=_optional_int(user_input.get("minimum_minutes_per_day")),
+        minimum_minutes_per_week=_optional_int(user_input.get("minimum_minutes_per_week")),
+        sources=SourceRules(
+            solar_enabled=user_input["solar_enabled"],
+            solar_max_export_price=_optional_float(user_input.get("solar_max_export_price")),
+            grid_free_enabled=user_input["grid_free_enabled"],
+            grid_cheap_enabled=user_input["grid_cheap_enabled"],
+            grid_normal_enabled=user_input["grid_normal_enabled"],
+            grid_expensive_enabled=user_input["grid_expensive_enabled"],
+        ),
+    )
+
+
+def _subentry_id_exists(entry: config_entries.ConfigEntry, load_id: str) -> bool:
+    return any(
+        subentry.unique_id == load_id and subentry.subentry_type == SUBENTRY_TYPE_LOAD
+        for subentry in entry.subentries.values()
+    )
 
 
 def _slugify(value: str) -> str:
     slug = value.strip().lower().replace(" ", "_")
     allowed = "".join(ch for ch in slug if ch.isalnum() or ch == "_")
     return allowed or str(uuid.uuid4())[:8]
-
-
-def _load_id_exists(entry: config_entries.ConfigEntry, load_id: str) -> bool:
-    return any(
-        load.get(CONF_LOAD_ID) == load_id for load in entry.options.get(CONF_LOADS, [])
-    )
 
 
 def _optional_float(value: Any) -> float | None:

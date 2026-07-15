@@ -2,6 +2,9 @@
 
 DOMAIN = "energy_dispatcher"
 
+PLATFORMS = ["load"]
+SUBENTRY_TYPE_LOAD = "load"
+
 CONF_PRICE_SENSOR = "price_sensor"
 CONF_GRID_INPUT_SENSOR = "grid_input_sensor"
 CONF_GRID_OUTPUT_SENSOR = "grid_output_sensor"

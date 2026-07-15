@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+from types import MappingProxyType
 import logging
+from typing import TYPE_CHECKING
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from .const import CONF_LOADS, DOMAIN, PLATFORMS, SUBENTRY_TYPE_LOAD
+from .models import load_config_from_dict, load_config_to_subentry_data
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+
+_LOGGER = logging.getLogger(__name__)
+
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up services once for the integration."""
     from .services import async_setup_services
@@ -16,9 +26,20 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Energy Dispatcher from a config entry."""
+    from homeassistant.helpers import device_registry as dr
+
     from .coordinator import EnergyDispatcherCoordinator
 
     _LOGGER.debug("Setting up config entry %s", entry.entry_id)
+    device_registry = dr.async_get(hass)
+    device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, entry.entry_id)},
+        manufacturer="Energy Dispatcher",
+        model="Hub",
+        name=entry.title,
+    )
+
     coordinator = EnergyDispatcherCoordinator(hass, entry)
     await coordinator.async_load_runtime()
     await coordinator.async_config_entry_first_refresh()
@@ -36,7 +57,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         len(coordinator.loads),
     )
 
-    entry.async_on_unload(entry.add_update_listener(_async_update_options))
+    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
 
     return True
 
@@ -49,5 +70,25 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
-async def _async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate config entry structure."""
+    from homeassistant.config_entries import ConfigSubentry
+
+    if entry.version == 1:
+        for load_data in entry.options.get(CONF_LOADS, []):
+            load = load_config_from_dict(load_data)
+            hass.config_entries.async_add_subentry(
+                entry,
+                ConfigSubentry(
+                    data=MappingProxyType(load_config_to_subentry_data(load)),
+                    subentry_type=SUBENTRY_TYPE_LOAD,
+                    title=load.name,
+                    unique_id=load.load_id,
+                ),
+            )
+        hass.config_entries.async_update_entry(entry, version=2, options={})
+    return True
+
+
+async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
