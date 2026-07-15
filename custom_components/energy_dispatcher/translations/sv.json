@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Energy Dispatcher",
-        "description": "Ställ in globala sensorer och pristersklar. Lägg till laster efteråt från integrationssidan.",
+        "description": "Ställ in globala sensorer och trösklar för nätpris. Lägg till laster efteråt från integrationssidan.",
         "sections": {
           "sensors": {
             "name": "Sensorer",
@@ -42,7 +42,7 @@
             }
           },
           "price_thresholds": {
-            "name": "Pristersklar (nät)",
+            "name": "Trösklar för nätpris",
             "description": "Klassificerar spotpris som gratis, billigt, normalt eller dyrt.",
             "data": {
               "price_free_threshold": "Gratis nät-tröskel",
@@ -98,7 +98,7 @@
             }
           },
           "price_thresholds": {
-            "name": "Pristersklar (nät)",
+            "name": "Trösklar för nätpris",
             "description": "Klassificerar spotpris som gratis, billigt, normalt eller dyrt.",
             "data": {
               "price_free_threshold": "Gratis nät-tröskel",
