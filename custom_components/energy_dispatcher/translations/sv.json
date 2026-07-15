@@ -4,7 +4,7 @@
       "user": {
         "title": "Energy Dispatcher",
         "description": "Ställ in globala sensorer och pristersklar. Lägg till laster efteråt från integrationssidan.",
-        "section": {
+        "sections": {
           "sensors": {
             "name": "Sensorer",
             "description": "Välj sensorer för elpris och nätets effekt in/ut.",
@@ -60,7 +60,7 @@
       "reconfigure": {
         "title": "Konfigurera Energy Dispatcher",
         "description": "Uppdatera hubbens globala inställningar.",
-        "section": {
+        "sections": {
           "sensors": {
             "name": "Sensorer",
             "description": "Välj sensorer för elpris och nätets effekt in/ut.",
@@ -135,7 +135,7 @@
         "user": {
           "title": "Lägg till last",
           "description": "Varje last får en egen entitet (t.ex. energy_dispatcher.sorptionsavfuktare) som din automation kan lyssna på.",
-          "section": {
+          "sections": {
             "basic": {
               "name": "Grundinställningar",
               "description": "Namn och effektbehov för lasten.",
@@ -193,7 +193,7 @@
         "reconfigure": {
           "title": "Konfigurera last",
           "description": "Uppdatera inställningar för denna last.",
-          "section": {
+          "sections": {
             "basic": {
               "name": "Grundinställningar",
               "description": "Namn och effektbehov för lasten.",

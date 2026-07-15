@@ -4,7 +4,7 @@
       "user": {
         "title": "Energy Dispatcher",
         "description": "Set up global sensors and price thresholds. Add loads afterwards from the integration page.",
-        "section": {
+        "sections": {
           "sensors": {
             "name": "Sensors",
             "description": "Select sensors for spot price and grid power in/out.",
@@ -60,7 +60,7 @@
       "reconfigure": {
         "title": "Configure Energy Dispatcher",
         "description": "Update global hub settings.",
-        "section": {
+        "sections": {
           "sensors": {
             "name": "Sensors",
             "description": "Select sensors for spot price and grid power in/out.",
@@ -135,7 +135,7 @@
         "user": {
           "title": "Add load",
           "description": "Each load gets its own entity (e.g. energy_dispatcher.dehumidifier) for your automations.",
-          "section": {
+          "sections": {
             "basic": {
               "name": "Basics",
               "description": "Name and power requirement for this load.",
@@ -193,7 +193,7 @@
         "reconfigure": {
           "title": "Configure load",
           "description": "Update settings for this load.",
-          "section": {
+          "sections": {
             "basic": {
               "name": "Basics",
               "description": "Name and power requirement for this load.",
