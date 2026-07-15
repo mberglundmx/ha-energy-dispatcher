@@ -3,54 +3,114 @@
     "step": {
       "user": {
         "title": "Energy Dispatcher",
-        "description": "Connect your energy sensors and set price thresholds. Add loads afterwards from the integration page.",
-        "data": {
-          "price_sensor": "Spot price sensor",
-          "grid_input_sensor": "Grid input (W)",
-          "grid_output_sensor": "Grid output (W)",
-          "export_price_offset": "Export compensation (fixed)",
-          "power_guard_strategy": "Power guard",
-          "power_guard_hourly_limit_kwh": "Hourly import limit (kWh)",
-          "price_free_threshold": "Free grid threshold",
-          "price_cheap_ratio": "Cheap grid ratio",
-          "price_expensive_ratio": "Expensive grid ratio"
-        },
-        "data_description": {
-          "price_sensor": "Sensor with current and upcoming spot prices (today and tomorrow when available). Examples: Nord Pool, Tibber, Amber.",
-          "grid_input_sensor": "Instantaneous power drawn from the grid in watts (W). Used for power guard and import tracking.",
-          "grid_output_sensor": "Instantaneous power exported to the grid in watts (W). When above zero, self-consumption (SOLAR mode) may be recommended.",
-          "export_price_offset": "Fixed compensation added to the current spot price to estimate export revenue per kWh. Example: if spot is 0.50 and compensation is 0.20, export price is 0.70. Same unit as your price sensor.",
-          "power_guard_strategy": "Optional protection against high grid import. Disabled = no limit. Simple threshold = max kWh per clock hour.",
-          "power_guard_hourly_limit_kwh": "Maximum grid import energy allowed per clock hour when power guard is enabled. Example: 2.0 = 2 kWh/h.",
-          "price_free_threshold": "Spot prices at or below this absolute value are treated as free grid (GRID_FREE). Same unit as your price sensor.",
-          "price_cheap_ratio": "Spot price below this fraction of the rolling weekly average is cheap grid (GRID_CHEAP). Example: 0.30 = 30 % of average.",
-          "price_expensive_ratio": "Spot price above this fraction of the rolling weekly average is expensive grid (GRID_EXPENSIVE). Example: 1.50 = 150 % of average."
+        "description": "Set up global sensors and price thresholds. Add loads afterwards from the integration page.",
+        "section": {
+          "sensors": {
+            "name": "Sensors",
+            "description": "Select sensors for spot price and grid power in/out.",
+            "data": {
+              "price_sensor": "Spot price sensor",
+              "grid_input_sensor": "Grid import (W)",
+              "grid_output_sensor": "Grid export (W)"
+            },
+            "data_description": {
+              "price_sensor": "Sensor with current and upcoming hourly prices (today/tomorrow). E.g. Nord Pool, Tibber.",
+              "grid_input_sensor": "Instantaneous power from the grid (W). Positive = import.",
+              "grid_output_sensor": "Instantaneous power to the grid (W). Positive = export/surplus."
+            }
+          },
+          "export": {
+            "name": "Export price (hub)",
+            "description": "Fixed compensation added to spot price to estimate export revenue for the whole home. Not the same as the per-load self-consumption threshold.",
+            "data": {
+              "export_price_offset": "Export compensation (currency/kWh)"
+            },
+            "data_description": {
+              "export_price_offset": "Export price = spot price + this compensation. E.g. spot 0.30 + 0.20 = export 0.50. Same unit as your price sensor."
+            }
+          },
+          "power_guard": {
+            "name": "Power guard",
+            "description": "Optional protection against high grid import per hour.",
+            "data": {
+              "power_guard_strategy": "Strategy",
+              "power_guard_hourly_limit_kwh": "Max import per hour (kWh)"
+            },
+            "data_description": {
+              "power_guard_strategy": "Disabled = no limit. Hourly limit = max kWh per clock hour.",
+              "power_guard_hourly_limit_kwh": "Only used with hourly limit strategy. E.g. 2.0 = max 2 kWh import per hour."
+            }
+          },
+          "price_thresholds": {
+            "name": "Price thresholds (grid)",
+            "description": "Classifies spot price as free, cheap, normal, or expensive.",
+            "data": {
+              "price_free_threshold": "Free grid threshold",
+              "price_cheap_ratio": "Cheap grid (ratio of average)",
+              "price_expensive_ratio": "Expensive grid (ratio of average)"
+            },
+            "data_description": {
+              "price_free_threshold": "Spot price at or below this value = GRID_FREE. Same unit as price sensor.",
+              "price_cheap_ratio": "Spot price below this fraction of weekly average = GRID_CHEAP. E.g. 0.30 = 30%.",
+              "price_expensive_ratio": "Spot price above this fraction of weekly average = GRID_EXPENSIVE. E.g. 1.50 = 150%."
+            }
+          }
         }
       },
       "reconfigure": {
         "title": "Configure Energy Dispatcher",
-        "description": "Update global sensors, export compensation, power guard, and price thresholds.",
-        "data": {
-          "price_sensor": "Spot price sensor",
-          "grid_input_sensor": "Grid input (W)",
-          "grid_output_sensor": "Grid output (W)",
-          "export_price_offset": "Export compensation (fixed)",
-          "power_guard_strategy": "Power guard",
-          "power_guard_hourly_limit_kwh": "Hourly import limit (kWh)",
-          "price_free_threshold": "Free grid threshold",
-          "price_cheap_ratio": "Cheap grid ratio",
-          "price_expensive_ratio": "Expensive grid ratio"
-        },
-        "data_description": {
-          "price_sensor": "Sensor with current and upcoming spot prices (today and tomorrow when available). Examples: Nord Pool, Tibber, Amber.",
-          "grid_input_sensor": "Instantaneous power drawn from the grid in watts (W). Used for power guard and import tracking.",
-          "grid_output_sensor": "Instantaneous power exported to the grid in watts (W). When above zero, self-consumption (SOLAR mode) may be recommended.",
-          "export_price_offset": "Fixed compensation added to the current spot price to estimate export revenue per kWh. Example: if spot is 0.50 and compensation is 0.20, export price is 0.70. Same unit as your price sensor.",
-          "power_guard_strategy": "Optional protection against high grid import. Disabled = no limit. Simple threshold = max kWh per clock hour.",
-          "power_guard_hourly_limit_kwh": "Maximum grid import energy allowed per clock hour when power guard is enabled. Example: 2.0 = 2 kWh/h.",
-          "price_free_threshold": "Spot prices at or below this absolute value are treated as free grid (GRID_FREE). Same unit as your price sensor.",
-          "price_cheap_ratio": "Spot price below this fraction of the rolling weekly average is cheap grid (GRID_CHEAP). Example: 0.30 = 30 % of average.",
-          "price_expensive_ratio": "Spot price above this fraction of the rolling weekly average is expensive grid (GRID_EXPENSIVE). Example: 1.50 = 150 % of average."
+        "description": "Update global hub settings.",
+        "section": {
+          "sensors": {
+            "name": "Sensors",
+            "description": "Select sensors for spot price and grid power in/out.",
+            "data": {
+              "price_sensor": "Spot price sensor",
+              "grid_input_sensor": "Grid import (W)",
+              "grid_output_sensor": "Grid export (W)"
+            },
+            "data_description": {
+              "price_sensor": "Sensor with current and upcoming hourly prices (today/tomorrow). E.g. Nord Pool, Tibber.",
+              "grid_input_sensor": "Instantaneous power from the grid (W). Positive = import.",
+              "grid_output_sensor": "Instantaneous power to the grid (W). Positive = export/surplus."
+            }
+          },
+          "export": {
+            "name": "Export price (hub)",
+            "description": "Fixed compensation added to spot price to estimate export revenue for the whole home. Not the same as the per-load self-consumption threshold.",
+            "data": {
+              "export_price_offset": "Export compensation (currency/kWh)"
+            },
+            "data_description": {
+              "export_price_offset": "Export price = spot price + this compensation. E.g. spot 0.30 + 0.20 = export 0.50. Same unit as your price sensor."
+            }
+          },
+          "power_guard": {
+            "name": "Power guard",
+            "description": "Optional protection against high grid import per hour.",
+            "data": {
+              "power_guard_strategy": "Strategy",
+              "power_guard_hourly_limit_kwh": "Max import per hour (kWh)"
+            },
+            "data_description": {
+              "power_guard_strategy": "Disabled = no limit. Hourly limit = max kWh per clock hour.",
+              "power_guard_hourly_limit_kwh": "Only used with hourly limit strategy. E.g. 2.0 = max 2 kWh import per hour."
+            }
+          },
+          "price_thresholds": {
+            "name": "Price thresholds (grid)",
+            "description": "Classifies spot price as free, cheap, normal, or expensive.",
+            "data": {
+              "price_free_threshold": "Free grid threshold",
+              "price_cheap_ratio": "Cheap grid (ratio of average)",
+              "price_expensive_ratio": "Expensive grid (ratio of average)"
+            },
+            "data_description": {
+              "price_free_threshold": "Spot price at or below this value = GRID_FREE. Same unit as price sensor.",
+              "price_cheap_ratio": "Spot price below this fraction of weekly average = GRID_CHEAP. E.g. 0.30 = 30%.",
+              "price_expensive_ratio": "Spot price above this fraction of weekly average = GRID_EXPENSIVE. E.g. 1.50 = 150%."
+            }
+          }
         }
       }
     },
@@ -74,58 +134,118 @@
       "step": {
         "user": {
           "title": "Add load",
-          "description": "Define a controllable energy consumer and which energy sources it may use.",
-          "data": {
-            "name": "Name",
-            "required_power": "Required power (W)",
-            "solar_enabled": "Prefer self-consumption",
-            "solar_max_export_price": "Max export price",
-            "minimum_minutes_per_day": "Minimum minutes per day",
-            "minimum_minutes_per_week": "Minimum minutes per week",
-            "grid_free_enabled": "Allow free grid",
-            "grid_cheap_enabled": "Allow cheap grid",
-            "grid_normal_enabled": "Allow normal grid",
-            "grid_expensive_enabled": "Allow expensive grid"
-          },
-          "data_description": {
-            "name": "Display name for this load. Becomes the entity id, e.g. energy_dispatcher.dehumidifier.",
-            "required_power": "Power the load needs to run, in watts (W). Used for export and self-consumption checks.",
-            "solar_enabled": "When enabled, recommend ON (SOLAR) while power is being exported to the grid and export price is below the threshold.",
-            "solar_max_export_price": "Prefer self-consumption only when estimated export price is below this fixed level. Same unit as your price sensor. Leave empty to ignore export price.",
-            "minimum_minutes_per_day": "Minimum ON minutes required per calendar day. Missing minutes are scheduled on the cheapest allowed hours. Leave empty for no daily requirement.",
-            "minimum_minutes_per_week": "Minimum ON minutes required per ISO week. Leave empty for no weekly requirement.",
-            "grid_free_enabled": "Allow running when spot price is at or below the free grid threshold.",
-            "grid_cheap_enabled": "Allow running when spot price is below the cheap grid ratio.",
-            "grid_normal_enabled": "Allow running when spot price is within the normal range.",
-            "grid_expensive_enabled": "Allow running when spot price is above the expensive grid ratio."
+          "description": "Each load gets its own entity (e.g. energy_dispatcher.dehumidifier) for your automations.",
+          "section": {
+            "basic": {
+              "name": "Basics",
+              "description": "Name and power requirement for this load.",
+              "data": {
+                "name": "Name",
+                "required_power": "Required power (W)"
+              },
+              "data_description": {
+                "name": "Display name. Becomes entity id: energy_dispatcher.<lowercase_name>.",
+                "required_power": "Power needed to run. Used for export and SOLAR checks."
+              }
+            },
+            "self_consumption": {
+              "name": "Self-consumption (SOLAR)",
+              "description": "Controls when this load runs on your own export. Hub export compensation calculates export price — here you set when this load should self-consume instead of selling.",
+              "data": {
+                "solar_enabled": "Allow SOLAR mode",
+                "solar_max_export_price": "Self-consume if export price below (currency/kWh)"
+              },
+              "data_description": {
+                "solar_enabled": "Recommend ON (SOLAR) while exporting when export price is low.",
+                "solar_max_export_price": "Run on export only if export price (spot + hub compensation) is below this. Leave empty to ignore export price."
+              }
+            },
+            "runtime": {
+              "name": "Minimum runtime",
+              "description": "Optional daily/weekly ON minute quotas. Missing minutes are scheduled on cheapest allowed hours.",
+              "data": {
+                "minimum_minutes_per_day": "Minimum minutes per day",
+                "minimum_minutes_per_week": "Minimum minutes per week"
+              },
+              "data_description": {
+                "minimum_minutes_per_day": "Leave empty for no daily requirement.",
+                "minimum_minutes_per_week": "Leave empty for no weekly requirement."
+              }
+            },
+            "grid_sources": {
+              "name": "Allowed grid prices",
+              "description": "Which price levels this load may run on from the grid.",
+              "data": {
+                "grid_free_enabled": "Free grid",
+                "grid_cheap_enabled": "Cheap grid",
+                "grid_normal_enabled": "Normal grid",
+                "grid_expensive_enabled": "Expensive grid"
+              },
+              "data_description": {
+                "grid_free_enabled": "Allow running on GRID_FREE.",
+                "grid_cheap_enabled": "Allow running on GRID_CHEAP.",
+                "grid_normal_enabled": "Allow running on GRID_NORMAL.",
+                "grid_expensive_enabled": "Allow running on GRID_EXPENSIVE."
+              }
+            }
           }
         },
         "reconfigure": {
           "title": "Configure load",
-          "description": "Update settings for this controllable load.",
-          "data": {
-            "name": "Name",
-            "required_power": "Required power (W)",
-            "solar_enabled": "Prefer self-consumption",
-            "solar_max_export_price": "Max export price",
-            "minimum_minutes_per_day": "Minimum minutes per day",
-            "minimum_minutes_per_week": "Minimum minutes per week",
-            "grid_free_enabled": "Allow free grid",
-            "grid_cheap_enabled": "Allow cheap grid",
-            "grid_normal_enabled": "Allow normal grid",
-            "grid_expensive_enabled": "Allow expensive grid"
-          },
-          "data_description": {
-            "name": "Display name for this load. Becomes the entity id, e.g. energy_dispatcher.dehumidifier.",
-            "required_power": "Power the load needs to run, in watts (W). Used for export and self-consumption checks.",
-            "solar_enabled": "When enabled, recommend ON (SOLAR) while power is being exported to the grid and export price is below the threshold.",
-            "solar_max_export_price": "Prefer self-consumption only when estimated export price is below this fixed level. Same unit as your price sensor. Leave empty to ignore export price.",
-            "minimum_minutes_per_day": "Minimum ON minutes required per calendar day. Missing minutes are scheduled on the cheapest allowed hours. Leave empty for no daily requirement.",
-            "minimum_minutes_per_week": "Minimum ON minutes required per ISO week. Leave empty for no weekly requirement.",
-            "grid_free_enabled": "Allow running when spot price is at or below the free grid threshold.",
-            "grid_cheap_enabled": "Allow running when spot price is below the cheap grid ratio.",
-            "grid_normal_enabled": "Allow running when spot price is within the normal range.",
-            "grid_expensive_enabled": "Allow running when spot price is above the expensive grid ratio."
+          "description": "Update settings for this load.",
+          "section": {
+            "basic": {
+              "name": "Basics",
+              "description": "Name and power requirement for this load.",
+              "data": {
+                "name": "Name",
+                "required_power": "Required power (W)"
+              },
+              "data_description": {
+                "name": "Display name. Entity id does not change if you rename.",
+                "required_power": "Power needed to run this load."
+              }
+            },
+            "self_consumption": {
+              "name": "Self-consumption (SOLAR)",
+              "description": "Hub export compensation calculates export price — here you control when this load should self-consume.",
+              "data": {
+                "solar_enabled": "Allow SOLAR mode",
+                "solar_max_export_price": "Self-consume if export price below (currency/kWh)"
+              },
+              "data_description": {
+                "solar_enabled": "Recommend ON (SOLAR) on export when export price is low.",
+                "solar_max_export_price": "Run on export if export price (spot + hub compensation) is below this. Empty = ignore."
+              }
+            },
+            "runtime": {
+              "name": "Minimum runtime",
+              "description": "Optional daily/weekly ON minute quotas.",
+              "data": {
+                "minimum_minutes_per_day": "Minimum minutes per day",
+                "minimum_minutes_per_week": "Minimum minutes per week"
+              },
+              "data_description": {
+                "minimum_minutes_per_day": "Leave empty for no daily requirement.",
+                "minimum_minutes_per_week": "Leave empty for no weekly requirement."
+              }
+            },
+            "grid_sources": {
+              "name": "Allowed grid prices",
+              "description": "Which price levels this load may run on from the grid.",
+              "data": {
+                "grid_free_enabled": "Free grid",
+                "grid_cheap_enabled": "Cheap grid",
+                "grid_normal_enabled": "Normal grid",
+                "grid_expensive_enabled": "Expensive grid"
+              },
+              "data_description": {
+                "grid_free_enabled": "Allow running on GRID_FREE.",
+                "grid_cheap_enabled": "Allow running on GRID_CHEAP.",
+                "grid_normal_enabled": "Allow running on GRID_NORMAL.",
+                "grid_expensive_enabled": "Allow running on GRID_EXPENSIVE."
+              }
+            }
           }
         }
       },
