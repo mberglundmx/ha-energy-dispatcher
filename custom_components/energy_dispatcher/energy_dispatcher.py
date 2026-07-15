@@ -21,11 +21,13 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Energy Dispatcher entities from a config entry."""
-    coordinator: EnergyDispatcherCoordinator = hass.data[DOMAIN][entry.entry_id]
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    coordinator: EnergyDispatcherCoordinator = entry_data["coordinator"]
 
     entities = [
         EnergyDispatcherEntity(coordinator, load)
         for load in coordinator.loads.values()
     ]
     hass.data[DOMAIN][entry.entry_id]["entities"] = entities
+    _LOGGER.debug("Added %d entities for entry %s", len(entities), entry.entry_id)
     async_add_entities(entities)

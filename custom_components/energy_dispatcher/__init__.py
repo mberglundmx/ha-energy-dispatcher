@@ -25,6 +25,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Energy Dispatcher from a config entry."""
     from .coordinator import EnergyDispatcherCoordinator
 
+    _LOGGER.debug("Setting up config entry %s", entry.entry_id)
     coordinator = EnergyDispatcherCoordinator(hass, entry)
     await coordinator.async_load_runtime()
     await coordinator.async_config_entry_first_refresh()
@@ -36,6 +37,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _LOGGER.debug(
+        "Setup complete for %s with %d loads",
+        entry.entry_id,
+        len(coordinator.loads),
+    )
 
     entry.async_on_unload(entry.add_update_listener(_async_update_options))
 
