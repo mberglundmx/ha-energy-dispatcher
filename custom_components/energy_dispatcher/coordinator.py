@@ -87,8 +87,10 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             runtime = self.runtime.setdefault(load_id, LoadRuntimeState())
             runtime.override = _clear_expired_override(runtime.override, now)
             tracker = self._runtime_trackers.setdefault(load_id, RuntimeTracker())
-            decision = evaluate_load(data, load, tracker, runtime.override)
             previous = runtime.last_decision
+            decision = evaluate_load(
+                data, load, tracker, runtime.override, previous=previous
+            )
 
             if previous is not None and previous.state == STATE_ON:
                 updated = accumulate_runtime(

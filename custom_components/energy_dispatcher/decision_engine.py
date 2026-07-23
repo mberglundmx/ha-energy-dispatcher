@@ -30,6 +30,7 @@ from .const import (
 from .decision_helpers import (
     available_export_power,
     classify_price,
+    is_already_solar_on,
     is_mode_allowed,
     is_price_data_ready,
     needs_price_data,
@@ -47,6 +48,7 @@ def evaluate_load(
     load: LoadConfig,
     runtime: RuntimeTracker,
     override: OverrideState | None = None,
+    previous: Decision | None = None,
 ) -> Decision:
     """Evaluate whether a load should run and with which energy source."""
     grid_state = global_state.power_guard.state
@@ -83,11 +85,11 @@ def evaluate_load(
     if (
         needs_price_data(load, global_state)
         and not is_price_data_ready(global_state)
-        and not solar_can_decide_without_price(load, global_state)
+        and not solar_can_decide_without_price(load, global_state, previous)
     ):
         return _unknown_decision(load, global_state, base_kwargs)
 
-    export_decision = _evaluate_export(global_state, load, base_kwargs)
+    export_decision = _evaluate_export(global_state, load, base_kwargs, previous)
     if export_decision is not None:
         return export_decision
 
@@ -144,13 +146,21 @@ def _evaluate_export(
     global_state: GlobalState,
     load: LoadConfig,
     base_kwargs: dict,
+    previous: Decision | None = None,
 ) -> Decision | None:
     sources = load.sources
     if not sources.solar_enabled:
         return None
 
     export_power = available_export_power(global_state)
-    if export_power < load.required_power:
+    already_on = is_already_solar_on(previous)
+
+    # Turn ON requires surplus covering the load. Once ON / SOLAR, keep running
+    # while any export remains — the load itself reduces measured export.
+    if already_on:
+        if export_power <= 0:
+            return None
+    elif export_power < load.required_power:
         return None
 
     max_export = sources.solar_max_export_price
@@ -162,7 +172,11 @@ def _evaluate_export(
         state=STATE_ON,
         energy_mode=ENERGY_MODE_SOLAR,
         reason=REASON_GRID_EXPORT,
-        reason_text="Grid export available — prefer self-consumption",
+        reason_text=(
+            "Grid export continues — keep self-consumption"
+            if already_on
+            else "Grid export available — prefer self-consumption"
+        ),
         next_opportunity=None,
         **base_kwargs,
     )

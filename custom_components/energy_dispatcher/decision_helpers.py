@@ -12,8 +12,9 @@ from .const import (
     PRICE_STATE_LOW,
     PRICE_STATE_NORMAL,
     PRICE_STATE_UNKNOWN,
+    STATE_ON,
 )
-from .models import GlobalState, PriceSlot, SourceRules, LoadConfig
+from .models import Decision, GlobalState, PriceSlot, SourceRules, LoadConfig
 from .price_timeline import current_slot
 
 
@@ -89,11 +90,32 @@ def needs_price_data(load: LoadConfig, global_state: GlobalState) -> bool:
     return False
 
 
-def solar_can_decide_without_price(load: LoadConfig, global_state: GlobalState) -> bool:
+def is_already_solar_on(previous: Decision | None) -> bool:
+    """True when the previous decision already recommended ON / SOLAR."""
+    return (
+        previous is not None
+        and previous.state == STATE_ON
+        and previous.energy_mode == ENERGY_MODE_SOLAR
+    )
+
+
+def solar_can_decide_without_price(
+    load: LoadConfig,
+    global_state: GlobalState,
+    previous: Decision | None = None,
+) -> bool:
     if not load.sources.solar_enabled:
         return False
-    if available_export_power(global_state) < load.required_power:
+
+    export_power = available_export_power(global_state)
+    if is_already_solar_on(previous):
+        # Keep SOLAR while still exporting; required_power check would
+        # immediately turn the load off after it consumes the surplus.
+        if export_power <= 0:
+            return False
+    elif export_power < load.required_power:
         return False
+
     if (
         load.sources.solar_max_export_price is not None
         and global_state.export_price is None

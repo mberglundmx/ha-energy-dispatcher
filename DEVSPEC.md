@@ -460,7 +460,7 @@ Example: `Basement dehumidifier`
 
 Example: `1400 W`
 
-The load is considered runnable in SOLAR mode only when current grid output ≥ required power.
+The load may **start** SOLAR mode when current grid output ≥ required power. Once already `ON` / `SOLAR`, it stays on while any export remains (`grid_output > 0`), so the load consuming the surplus does not cause on/off flapping.
 
 ### Allowed Sources
 
@@ -507,7 +507,7 @@ Rules are evaluated in priority order. The engine scans the full price timeline 
 ```
 1. Power guard (CRITICAL → OFF)
 2. Manual overrides
-3. SOLAR evaluation (grid output ≥ required power, export price rule)
+3. SOLAR evaluation (turn ON when grid output ≥ required power; keep ON while still exporting)
 4. GRID_FREE / GRID_CHEAP / GRID_NORMAL (current hour, then full timeline for next_opportunity)
 5. Runtime requirement (cheapest allowed hours if daily/weekly minimum not met)
 6. Default OFF with reason
@@ -521,7 +521,10 @@ For each entity on each recalculation:
 
 1. Read global state (grid input/output, price timeline, power guard state, export price)
 2. Apply power guard (`PowerGuardState.state == CRITICAL` → OFF) and overrides
-3. Check SOLAR: grid output ≥ required power and export price rule satisfied → `ON` / `SOLAR`
+3. Check SOLAR:
+   - Turn ON when grid output ≥ required power and export price rule is satisfied
+   - If already `ON` / `SOLAR`, keep ON while grid output > 0 (hysteresis — the load itself consumes surplus and would otherwise flap)
+   - Stop SOLAR when export drops to zero (or export price rule fails)
 4. Check current hour against allowed grid sources → `ON` with matching `energy_mode`
 5. If no match now, scan price timeline for the first future hour matching an allowed source → `OFF` with `next_opportunity` set
 6. If no allowed source exists in the timeline → `OFF` with appropriate `reason`

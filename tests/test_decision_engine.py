@@ -71,10 +71,11 @@ def _global_state(**overrides) -> GlobalState:
 
 def _load(**overrides) -> LoadConfig:
     sources = overrides.pop("sources", SourceRules(solar_enabled=True, grid_cheap_enabled=True))
+    required_power = overrides.pop("required_power", 1400)
     return LoadConfig(
         load_id="dehumidifier",
         name="Dehumidifier",
-        required_power=1400,
+        required_power=required_power,
         sources=sources,
         **overrides,
     )
@@ -167,6 +168,59 @@ def test_solar_still_works_without_price_timeline() -> None:
     )
     assert decision.state == STATE_ON
     assert decision.energy_mode == ENERGY_MODE_SOLAR
+
+
+def test_solar_hysteresis_keeps_on_while_still_exporting() -> None:
+    """Once ON/SOLAR, stay on if export drops below required_power but remains > 0."""
+    previous = evaluate_load(
+        _global_state(grid_output=1500),
+        _load(required_power=1000),
+        RuntimeTracker(),
+    )
+    assert previous.state == STATE_ON
+    assert previous.energy_mode == ENERGY_MODE_SOLAR
+
+    decision = evaluate_load(
+        _global_state(grid_output=500),
+        _load(required_power=1000),
+        RuntimeTracker(),
+        previous=previous,
+    )
+    assert decision.state == STATE_ON
+    assert decision.energy_mode == ENERGY_MODE_SOLAR
+    assert decision.available_power == 500
+
+
+def test_solar_stops_when_export_gone() -> None:
+    previous = evaluate_load(
+        _global_state(grid_output=1500),
+        _load(required_power=1000),
+        RuntimeTracker(),
+    )
+    assert previous.state == STATE_ON
+
+    decision = evaluate_load(
+        _global_state(
+            grid_output=0,
+            price_timeline=(
+                PriceSlot(start=_now().replace(minute=0, second=0, microsecond=0), price=0.05),
+            ),
+        ),
+        _load(required_power=1000),
+        RuntimeTracker(),
+        previous=previous,
+    )
+    assert decision.state == STATE_ON
+    assert decision.energy_mode == ENERGY_MODE_GRID_CHEAP
+
+
+def test_solar_does_not_start_below_required_power() -> None:
+    decision = evaluate_load(
+        _global_state(grid_output=500),
+        _load(required_power=1000, sources=SourceRules(solar_enabled=True)),
+        RuntimeTracker(),
+    )
+    assert decision.state != STATE_ON or decision.energy_mode != ENERGY_MODE_SOLAR
 
 
 def test_power_guard_critical_forces_off() -> None:
