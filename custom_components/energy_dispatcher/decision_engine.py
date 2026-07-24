@@ -39,7 +39,7 @@ from .decision_helpers import (
     solar_can_decide_without_price,
     solar_surplus_covers_load,
 )
-from .models import Decision, GlobalState, LoadConfig, OverrideState
+from .models import Decision, GlobalState, LoadConfig, LoadPowerSnapshot, OverrideState
 from .runtime_scheduler import RuntimeTracker
 from .price_timeline import current_slot
 from .runtime_scheduler import evaluate_runtime_requirement
@@ -51,15 +51,22 @@ def evaluate_load(
     runtime: RuntimeTracker,
     override: OverrideState | None = None,
     previous: Decision | None = None,
+    power: LoadPowerSnapshot | None = None,
 ) -> Decision:
     """Evaluate whether a load should run and with which energy source."""
+    power = power or LoadPowerSnapshot(
+        power_mode="fixed",
+        power_learning="fixed",
+        effective_required_power=load.required_power,
+        measured_power=0.0,
+    )
     grid_state = global_state.power_guard.state
     current = current_slot(global_state.price_timeline, global_state.now)
     price_state_value = price_state(current, global_state)
 
     base_kwargs = {
         "available_power": available_export_power(global_state),
-        "required_power": load.required_power,
+        "required_power": power.effective_required_power or 0.0,
         "price_state": price_state_value,
         "grid_state": grid_state,
     }
@@ -87,11 +94,11 @@ def evaluate_load(
     if (
         needs_price_data(load, global_state)
         and not is_price_data_ready(global_state)
-        and not solar_can_decide_without_price(load, global_state, previous)
+        and not solar_can_decide_without_price(load, global_state, power)
     ):
-        return _unknown_decision(load, global_state, base_kwargs)
+        return _unknown_decision(base_kwargs)
 
-    export_decision = _evaluate_export(global_state, load, base_kwargs, previous)
+    export_decision = _evaluate_export(global_state, load, base_kwargs, previous, power)
     if export_decision is not None:
         return export_decision
 
@@ -126,11 +133,7 @@ def evaluate_load(
     )
 
 
-def _unknown_decision(
-    load: LoadConfig,
-    global_state: GlobalState,
-    base_kwargs: dict,
-) -> Decision:
+def _unknown_decision(base_kwargs: dict) -> Decision:
     return Decision(
         state=STATE_UNKNOWN,
         energy_mode=ENERGY_MODE_BLOCKED,
@@ -138,7 +141,7 @@ def _unknown_decision(
         reason_text="Waiting for price sensor data",
         next_opportunity=None,
         available_power=base_kwargs["available_power"],
-        required_power=load.required_power,
+        required_power=base_kwargs["required_power"],
         price_state=PRICE_STATE_UNKNOWN,
         grid_state=base_kwargs["grid_state"],
     )
@@ -148,15 +151,14 @@ def _evaluate_export(
     global_state: GlobalState,
     load: LoadConfig,
     base_kwargs: dict,
-    previous: Decision | None = None,
+    previous: Decision | None,
+    power: LoadPowerSnapshot,
 ) -> Decision | None:
     sources = load.sources
     if not sources.solar_enabled:
         return None
 
-    # Turn ON requires surplus covering the load. Once already ON, measured
-    # export is residual after the load — keep/switch to SOLAR while exporting.
-    if not solar_surplus_covers_load(load, global_state, previous):
+    if not solar_surplus_covers_load(global_state, power):
         return None
 
     max_export = sources.solar_max_export_price
@@ -165,15 +167,19 @@ def _evaluate_export(
             return None
 
     already_on = is_already_on(previous)
+    pending = power.effective_required_power is None
+    if pending:
+        reason_text = "Grid export available — learning load power"
+    elif already_on:
+        reason_text = "Grid export covers full load power — keep self-consumption"
+    else:
+        reason_text = "Grid export available — prefer self-consumption"
+
     return Decision(
         state=STATE_ON,
         energy_mode=ENERGY_MODE_SOLAR,
         reason=REASON_GRID_EXPORT,
-        reason_text=(
-            "Grid export continues — keep self-consumption"
-            if already_on
-            else "Grid export available — prefer self-consumption"
-        ),
+        reason_text=reason_text,
         next_opportunity=None,
         **base_kwargs,
     )

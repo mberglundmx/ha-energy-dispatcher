@@ -20,6 +20,8 @@ from .const import (
     CONF_LOAD_NAME,
     CONF_POWER_GUARD_HOURLY_LIMIT_KWH,
     CONF_POWER_GUARD_STRATEGY,
+    CONF_POWER_MODE,
+    CONF_POWER_SENSOR,
     CONF_PRICE_CHEAP_RATIO,
     CONF_PRICE_EXPENSIVE_RATIO,
     CONF_PRICE_FREE_THRESHOLD,
@@ -33,6 +35,8 @@ from .const import (
     DOMAIN,
     POWER_GUARD_STRATEGY_NONE,
     POWER_GUARD_STRATEGY_SIMPLE_THRESHOLD,
+    POWER_MODE_FIXED,
+    POWER_MODE_SENSOR,
     SUBENTRY_TYPE_LOAD,
 )
 from .models import (
@@ -160,12 +164,23 @@ def _load_schema() -> vol.Schema:
                 vol.Schema(
                     {
                         vol.Required(CONF_LOAD_NAME): str,
-                        vol.Required(CONF_REQUIRED_POWER): selector.NumberSelector(
+                        vol.Required(
+                            CONF_POWER_MODE, default=POWER_MODE_FIXED
+                        ): selector.SelectSelector(
+                            selector.SelectSelectorConfig(
+                                options=[POWER_MODE_FIXED, POWER_MODE_SENSOR],
+                                translation_key="power_mode",
+                            )
+                        ),
+                        vol.Optional(CONF_REQUIRED_POWER): selector.NumberSelector(
                             selector.NumberSelectorConfig(
                                 min=1,
                                 step=100,
                                 mode=selector.NumberSelectorMode.BOX,
                             )
+                        ),
+                        vol.Optional(CONF_POWER_SENSOR): selector.EntitySelector(
+                            selector.EntitySelectorConfig(domain="sensor")
                         ),
                     }
                 ),
@@ -293,6 +308,13 @@ class LoadSubentryFlowHandler(ConfigSubentryFlow):
 
         if user_input is not None:
             flat = _flatten_sections(user_input, LOAD_SECTIONS)
+            errors = _validate_load_power(flat)
+            if errors:
+                return self.async_show_form(
+                    step_id=step_id,
+                    data_schema=schema,
+                    errors=errors,
+                )
             load_id = _slugify(flat[CONF_LOAD_NAME])
             if is_reconfigure:
                 assert subentry is not None
@@ -331,7 +353,9 @@ class LoadSubentryFlowHandler(ConfigSubentryFlow):
             defaults = _nest_load_defaults(
                 {
                     CONF_LOAD_NAME: load.name,
+                    CONF_POWER_MODE: load.power_mode,
                     CONF_REQUIRED_POWER: load.required_power,
+                    CONF_POWER_SENSOR: load.power_sensor,
                     "solar_enabled": load.sources.solar_enabled,
                     "solar_max_export_price": load.sources.solar_max_export_price,
                     "minimum_minutes_per_day": load.minimum_minutes_per_day,
@@ -392,7 +416,9 @@ def _nest_load_defaults(flat: dict[str, Any]) -> dict[str, Any]:
     return {
         "basic": {
             CONF_LOAD_NAME: flat.get(CONF_LOAD_NAME),
+            CONF_POWER_MODE: flat.get(CONF_POWER_MODE, POWER_MODE_FIXED),
             CONF_REQUIRED_POWER: flat.get(CONF_REQUIRED_POWER),
+            CONF_POWER_SENSOR: flat.get(CONF_POWER_SENSOR),
         },
         "self_consumption": {
             "solar_enabled": flat.get("solar_enabled", True),
@@ -411,11 +437,43 @@ def _nest_load_defaults(flat: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _validate_load_power(flat: dict[str, Any]) -> dict[str, str]:
+    mode = flat.get(CONF_POWER_MODE, POWER_MODE_FIXED)
+    if mode == POWER_MODE_SENSOR:
+        if not flat.get(CONF_POWER_SENSOR):
+            return {"base": "power_sensor_required"}
+        return {}
+    if flat.get(CONF_REQUIRED_POWER) in (None, ""):
+        return {"base": "required_power_required"}
+    return {}
+
+
 def _load_from_user_input(user_input: dict[str, Any], load_id: str) -> LoadConfig:
+    mode = user_input.get(CONF_POWER_MODE, POWER_MODE_FIXED)
+    if mode == POWER_MODE_SENSOR:
+        return LoadConfig(
+            load_id=load_id,
+            name=user_input[CONF_LOAD_NAME],
+            power_mode=POWER_MODE_SENSOR,
+            required_power=None,
+            power_sensor=user_input[CONF_POWER_SENSOR],
+            minimum_minutes_per_day=_optional_int(user_input.get("minimum_minutes_per_day")),
+            minimum_minutes_per_week=_optional_int(user_input.get("minimum_minutes_per_week")),
+            sources=SourceRules(
+                solar_enabled=user_input["solar_enabled"],
+                solar_max_export_price=_optional_float(user_input.get("solar_max_export_price")),
+                grid_free_enabled=user_input["grid_free_enabled"],
+                grid_cheap_enabled=user_input["grid_cheap_enabled"],
+                grid_normal_enabled=user_input["grid_normal_enabled"],
+                grid_expensive_enabled=user_input["grid_expensive_enabled"],
+            ),
+        )
     return LoadConfig(
         load_id=load_id,
         name=user_input[CONF_LOAD_NAME],
+        power_mode=POWER_MODE_FIXED,
         required_power=float(user_input[CONF_REQUIRED_POWER]),
+        power_sensor=None,
         minimum_minutes_per_day=_optional_int(user_input.get("minimum_minutes_per_day")),
         minimum_minutes_per_week=_optional_int(user_input.get("minimum_minutes_per_week")),
         sources=SourceRules(

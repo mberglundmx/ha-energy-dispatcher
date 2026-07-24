@@ -177,7 +177,7 @@ def evaluate_runtime_requirement(
             next_opportunity=None,
             price_state=price_state(current, global_state),
             available_power=available_export_power(global_state),
-            required_power=load.required_power,
+            required_power=base_kwargs["required_power"],
             grid_state=base_kwargs["grid_state"],
         )
 
@@ -195,6 +195,6 @@ def evaluate_runtime_requirement(
         next_opportunity=next_hour,
         price_state=price_state(current, global_state),
         available_power=available_export_power(global_state),
-        required_power=load.required_power,
+        required_power=base_kwargs["required_power"],
         grid_state=base_kwargs["grid_state"],
     )

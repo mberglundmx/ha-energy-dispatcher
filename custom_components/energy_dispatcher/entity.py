@@ -11,6 +11,8 @@ from .const import (
     ATTR_CURRENT_PRICE,
     ATTR_ENERGY_MODE,
     ATTR_GRID_STATE,
+    ATTR_LEARNED_REQUIRED_POWER,
+    ATTR_MEASURED_POWER,
     ATTR_NEXT_OPPORTUNITY,
     ATTR_POWER_GUARD_BILLING_PERIOD,
     ATTR_POWER_GUARD_HEADROOM,
@@ -20,6 +22,8 @@ from .const import (
     ATTR_POWER_GUARD_PEAK_AVERAGE,
     ATTR_POWER_GUARD_PROJECTED_HOUR_KWH,
     ATTR_POWER_GUARD_STRATEGY,
+    ATTR_POWER_LEARNING,
+    ATTR_POWER_MODE,
     ATTR_PRICE_STATE,
     ATTR_REASON,
     ATTR_REASON_TEXT,
@@ -30,6 +34,7 @@ from .const import (
     ATTR_RUNTIME_REMAINING_MINUTES,
     DOMAIN,
     POWER_GUARD_STRATEGY_NONE,
+    POWER_MODE_SENSOR,
 )
 from .coordinator import EnergyDispatcherCoordinator
 from .price_timeline import current_slot
@@ -94,7 +99,17 @@ class EnergyDispatcherEntity(CoordinatorEntity[EnergyDispatcherCoordinator], Ent
             ATTR_REQUIRED_POWER: decision.required_power,
             ATTR_PRICE_STATE: decision.price_state,
             ATTR_GRID_STATE: decision.grid_state,
+            ATTR_POWER_MODE: self._load.power_mode,
         }
+        snapshot = self.coordinator.get_power_snapshot(self._load.load_id)
+        if snapshot is not None:
+            attrs[ATTR_POWER_LEARNING] = snapshot.power_learning
+            if self._load.power_mode == POWER_MODE_SENSOR:
+                attrs[ATTR_MEASURED_POWER] = snapshot.measured_power
+                if snapshot.learned_required_power is not None:
+                    attrs[ATTR_LEARNED_REQUIRED_POWER] = round(
+                        snapshot.learned_required_power, 1
+                    )
         global_state = self._global_state()
         if global_state is not None:
             current = current_slot(global_state.price_timeline, global_state.now)

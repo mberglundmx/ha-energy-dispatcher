@@ -20,6 +20,8 @@ CONF_LOADS = "loads"
 CONF_LOAD_ID = "load_id"
 CONF_LOAD_NAME = "name"
 CONF_REQUIRED_POWER = "required_power"
+CONF_POWER_MODE = "power_mode"
+CONF_POWER_SENSOR = "power_sensor"
 CONF_ALLOWED_SOURCES = "allowed_sources"
 
 CONF_SOURCE_SOLAR = "solar"
@@ -37,6 +39,13 @@ DEFAULT_PRICE_CHEAP_RATIO = 0.3
 DEFAULT_PRICE_EXPENSIVE_RATIO = 1.5
 DEFAULT_POWER_GUARD_HOURLY_LIMIT_KWH = 2.0
 DEFAULT_SCAN_INTERVAL = 60
+
+POWER_MODE_FIXED = "fixed"
+POWER_MODE_SENSOR = "sensor"
+
+POWER_LEARNING_FIXED = "fixed"
+POWER_LEARNING_PENDING = "pending"
+POWER_LEARNING_READY = "ready"
 
 POWER_GUARD_STRATEGY_NONE = "none"
 POWER_GUARD_STRATEGY_SIMPLE_THRESHOLD = "simple_threshold"
@@ -71,6 +80,10 @@ ATTR_REASON = "reason"
 ATTR_REASON_TEXT = "reason_text"
 ATTR_AVAILABLE_POWER = "available_power"
 ATTR_REQUIRED_POWER = "required_power"
+ATTR_POWER_MODE = "power_mode"
+ATTR_MEASURED_POWER = "measured_power"
+ATTR_LEARNED_REQUIRED_POWER = "learned_required_power"
+ATTR_POWER_LEARNING = "power_learning"
 ATTR_PRICE_STATE = "price_state"
 ATTR_CURRENT_PRICE = "current_price"
 ATTR_ROLLING_AVERAGE_PRICE = "rolling_average_price"

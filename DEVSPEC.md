@@ -460,7 +460,10 @@ Example: `Basement dehumidifier`
 
 Example: `1400 W`
 
-The load may **start** SOLAR mode when current grid output ≥ required power. Once already `ON` (including while on a grid mode), it stays on / switches to SOLAR while any export remains (`grid_output > 0`), because measured export is residual after the load is consuming.
+The load may **start** SOLAR when there is grid export and headroom for full rated power:
+`export + measured_load_power ≥ required_power`.
+
+`required_power` is either a fixed config value or a **learned 7-day max** from an optional per-load power sensor (5-minute block averages while ON). Without learned values yet, SOLAR may still start on any export (“chance”). While already drawing near full power, residual export plus measured draw recovers classic hysteresis.
 
 ### Allowed Sources
 

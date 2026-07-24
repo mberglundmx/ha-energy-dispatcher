@@ -29,20 +29,28 @@ from .const import (
     DOMAIN,
     POWER_GUARD_STRATEGY_NONE,
     POWER_GUARD_STRATEGY_SIMPLE_THRESHOLD,
+    POWER_LEARNING_FIXED,
+    POWER_LEARNING_PENDING,
+    POWER_LEARNING_READY,
+    POWER_MODE_FIXED,
+    POWER_MODE_SENSOR,
     STATE_ON,
     SUBENTRY_TYPE_LOAD,
 )
 from .decision_engine import evaluate_load
+from .decision_helpers import is_already_on
 from .hourly_aggregator import HourlyAggregator
 from .models import (
     GlobalState,
     LoadConfig,
+    LoadPowerSnapshot,
     LoadRuntimeState,
     OverrideState,
     PriceThresholds,
     load_config_from_subentry,
 )
 from .power_guard import PowerGuardConfig, evaluate_power_guard
+from .power_learner import LoadPowerLearner
 from .price_provider import PriceProvider
 from .price_timeline import compute_rolling_average, current_slot
 from .runtime_scheduler import RuntimeTracker, accumulate_runtime
@@ -50,6 +58,7 @@ from .runtime_scheduler import RuntimeTracker, accumulate_runtime
 _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
 STORAGE_KEY = "energy_dispatcher.runtime"
+POWER_STORAGE_KEY = "energy_dispatcher.power_peaks"
 
 
 class EnergyDispatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -66,8 +75,11 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.loads: dict[str, LoadConfig] = {}
         self.runtime: dict[str, LoadRuntimeState] = {}
         self._runtime_trackers: dict[str, RuntimeTracker] = {}
+        self._power_learners: dict[str, LoadPowerLearner] = {}
+        self._power_snapshots: dict[str, LoadPowerSnapshot] = {}
         self._hourly_aggregator = HourlyAggregator()
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+        self._power_store = Store(hass, STORAGE_VERSION, POWER_STORAGE_KEY)
         self._listener_cancel = None
         self._reload_loads()
 
@@ -76,20 +88,47 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for load_id, tracker_data in data.items():
             self._runtime_trackers[load_id] = RuntimeTracker.from_dict(tracker_data)
 
+        power_data = await self._power_store.async_load() or {}
+        for load_id, learner_data in power_data.items():
+            self._power_learners[load_id] = LoadPowerLearner.from_dict(learner_data)
+
     async def _async_update_data(self) -> dict[str, Any]:
         now = dt_util.now()
         data = self._build_global_state(now)
         interval_minutes = DEFAULT_SCAN_INTERVAL / 60
         runtime_dirty = False
+        power_dirty = False
         decisions = {}
+        self._power_snapshots = {}
 
         for load_id, load in self.loads.items():
             runtime = self.runtime.setdefault(load_id, LoadRuntimeState())
             runtime.override = _clear_expired_override(runtime.override, now)
             tracker = self._runtime_trackers.setdefault(load_id, RuntimeTracker())
             previous = runtime.last_decision
+            power = self._resolve_power_snapshot(load, previous, now)
+            self._power_snapshots[load_id] = power
+
+            if load.power_mode == POWER_MODE_SENSOR:
+                learner = self._power_learners.setdefault(load_id, LoadPowerLearner())
+                measured = _read_entity_power(self.hass, load.power_sensor)
+                if learner.sample(
+                    now,
+                    measured,
+                    is_on=is_already_on(previous),
+                ):
+                    power_dirty = True
+                # Refresh learned value after sampling for this decision.
+                power = self._resolve_power_snapshot(load, previous, now)
+                self._power_snapshots[load_id] = power
+
             decision = evaluate_load(
-                data, load, tracker, runtime.override, previous=previous
+                data,
+                load,
+                tracker,
+                runtime.override,
+                previous=previous,
+                power=power,
             )
 
             if previous is not None and previous.state == STATE_ON:
@@ -119,8 +158,57 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     for load_id, tracker in self._runtime_trackers.items()
                 }
             )
+        if power_dirty:
+            await self._power_store.async_save(
+                {
+                    load_id: learner.to_dict()
+                    for load_id, learner in self._power_learners.items()
+                }
+            )
 
-        return {"global_state": data, "decisions": decisions}
+        return {
+            "global_state": data,
+            "decisions": decisions,
+            "power_snapshots": self._power_snapshots,
+        }
+
+    def _resolve_power_snapshot(
+        self,
+        load: LoadConfig,
+        previous,
+        now: datetime,
+    ) -> LoadPowerSnapshot:
+        if load.power_mode == POWER_MODE_SENSOR:
+            measured = _read_entity_power(self.hass, load.power_sensor) or 0.0
+            learner = self._power_learners.setdefault(load.load_id, LoadPowerLearner())
+            learned = learner.learned_required_power(now)
+            if learned is None:
+                return LoadPowerSnapshot(
+                    power_mode=POWER_MODE_SENSOR,
+                    power_learning=POWER_LEARNING_PENDING,
+                    effective_required_power=None,
+                    measured_power=measured,
+                    learned_required_power=None,
+                )
+            return LoadPowerSnapshot(
+                power_mode=POWER_MODE_SENSOR,
+                power_learning=POWER_LEARNING_READY,
+                effective_required_power=learned,
+                measured_power=measured,
+                learned_required_power=learned,
+            )
+
+        required = float(load.required_power or 0.0)
+        # Without a load power sensor, assume full draw while already ON so
+        # export + measured recovers the classic hysteresis (export > 0).
+        measured = required if is_already_on(previous) else 0.0
+        return LoadPowerSnapshot(
+            power_mode=POWER_MODE_FIXED,
+            power_learning=POWER_LEARNING_FIXED,
+            effective_required_power=required,
+            measured_power=measured,
+            learned_required_power=None,
+        )
 
     def _reload_loads(self) -> None:
         self.loads = {}
@@ -169,6 +257,9 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def get_runtime_tracker(self, load_id: str) -> RuntimeTracker:
         return self._runtime_trackers.get(load_id, RuntimeTracker())
 
+    def get_power_snapshot(self, load_id: str) -> LoadPowerSnapshot | None:
+        return self._power_snapshots.get(load_id)
+
     @callback
     def async_setup_listeners(self) -> None:
         """Refresh immediately when dependency sensors change."""
@@ -181,6 +272,11 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             if entity_id
         ]
+        for load in self.loads.values():
+            if load.power_mode == POWER_MODE_SENSOR and load.power_sensor:
+                entity_ids.append(load.power_sensor)
+        # Deduplicate while preserving order
+        entity_ids = list(dict.fromkeys(entity_ids))
         if not entity_ids:
             return
 
@@ -225,10 +321,7 @@ def _grid_output_entity(config: dict[str, Any]) -> str | None:
     return config.get(CONF_GRID_OUTPUT_SENSOR)
 
 
-def _read_grid_power(
-    hass: HomeAssistant, config: dict[str, Any], *, input_sensor: bool
-) -> float | None:
-    entity_id = _grid_input_entity(config) if input_sensor else _grid_output_entity(config)
+def _read_entity_power(hass: HomeAssistant, entity_id: str | None) -> float | None:
     if not entity_id:
         return None
     state = hass.states.get(entity_id)
@@ -238,6 +331,13 @@ def _read_grid_power(
         return max(0.0, float(state.state))
     except (TypeError, ValueError):
         return None
+
+
+def _read_grid_power(
+    hass: HomeAssistant, config: dict[str, Any], *, input_sensor: bool
+) -> float | None:
+    entity_id = _grid_input_entity(config) if input_sensor else _grid_output_entity(config)
+    return _read_entity_power(hass, entity_id)
 
 
 def _power_guard_config(data: dict[str, Any]) -> PowerGuardConfig:

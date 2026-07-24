@@ -6,9 +6,15 @@ from datetime import datetime, timedelta, timezone
 
 from custom_components.energy_dispatcher.const import (
     ENERGY_MODE_GRID_CHEAP,
+    ENERGY_MODE_GRID_EXPENSIVE,
     ENERGY_MODE_SOLAR,
     GRID_STATE_CRITICAL,
     POWER_GUARD_STRATEGY_SIMPLE_THRESHOLD,
+    POWER_LEARNING_FIXED,
+    POWER_LEARNING_PENDING,
+    POWER_LEARNING_READY,
+    POWER_MODE_FIXED,
+    POWER_MODE_SENSOR,
     REASON_DATA_UNAVAILABLE,
     REASON_GRID_EXPORT,
     REASON_NOT_CHEAP_YET,
@@ -18,8 +24,10 @@ from custom_components.energy_dispatcher.const import (
 )
 from custom_components.energy_dispatcher.decision_engine import evaluate_load
 from custom_components.energy_dispatcher.models import (
+    Decision,
     GlobalState,
     LoadConfig,
+    LoadPowerSnapshot,
     PriceSlot,
     PriceThresholds,
     SourceRules,
@@ -72,12 +80,30 @@ def _global_state(**overrides) -> GlobalState:
 def _load(**overrides) -> LoadConfig:
     sources = overrides.pop("sources", SourceRules(solar_enabled=True, grid_cheap_enabled=True))
     required_power = overrides.pop("required_power", 1400)
+    power_mode = overrides.pop("power_mode", POWER_MODE_FIXED)
     return LoadConfig(
         load_id="dehumidifier",
         name="Dehumidifier",
+        power_mode=power_mode,
         required_power=required_power,
         sources=sources,
         **overrides,
+    )
+
+
+def _power(
+    *,
+    required: float | None,
+    measured: float = 0.0,
+    mode: str = POWER_MODE_FIXED,
+    learning: str = POWER_LEARNING_FIXED,
+) -> LoadPowerSnapshot:
+    return LoadPowerSnapshot(
+        power_mode=mode,
+        power_learning=learning,
+        effective_required_power=required,
+        measured_power=measured,
+        learned_required_power=required if learning == POWER_LEARNING_READY else None,
     )
 
 
@@ -170,12 +196,13 @@ def test_solar_still_works_without_price_timeline() -> None:
     assert decision.energy_mode == ENERGY_MODE_SOLAR
 
 
-def test_solar_hysteresis_keeps_on_while_still_exporting() -> None:
-    """Once ON/SOLAR, stay on if export drops below required_power but remains > 0."""
+def test_solar_hysteresis_uses_export_plus_measured() -> None:
+    """While ON at full draw, residual export still covers rated power."""
     previous = evaluate_load(
         _global_state(grid_output=1500),
         _load(required_power=1000),
         RuntimeTracker(),
+        power=_power(required=1000, measured=0),
     )
     assert previous.state == STATE_ON
     assert previous.energy_mode == ENERGY_MODE_SOLAR
@@ -185,25 +212,46 @@ def test_solar_hysteresis_keeps_on_while_still_exporting() -> None:
         _load(required_power=1000),
         RuntimeTracker(),
         previous=previous,
+        power=_power(required=1000, measured=1000),
     )
     assert decision.state == STATE_ON
     assert decision.energy_mode == ENERGY_MODE_SOLAR
     assert decision.available_power == 500
 
 
-def test_solar_switches_from_grid_when_already_on_and_exporting() -> None:
-    """If already ON on grid with residual export, prefer SOLAR over GRID_*."""
-    from custom_components.energy_dispatcher.const import (
-        ENERGY_MODE_GRID_EXPENSIVE,
-        REASON_GRID_EXPORT,
+def test_solar_rejects_low_draw_without_headroom_for_full_power() -> None:
+    """ON at 10W with only 100W export must not claim SOLAR for 1000W rated load."""
+    previous = Decision(
+        state=STATE_ON,
+        energy_mode=ENERGY_MODE_GRID_CHEAP,
+        reason="grid_cheap",
+        reason_text="cheap",
+        available_power=100,
+        required_power=1000,
+        price_state="LOW",
+        grid_state="NORMAL",
     )
-    from custom_components.energy_dispatcher.models import Decision
+    decision = evaluate_load(
+        _global_state(grid_output=100),
+        _load(required_power=1000, sources=SourceRules(solar_enabled=True)),
+        RuntimeTracker(),
+        previous=previous,
+        power=_power(
+            required=1000,
+            measured=10,
+            mode=POWER_MODE_SENSOR,
+            learning=POWER_LEARNING_READY,
+        ),
+    )
+    assert decision.energy_mode != ENERGY_MODE_SOLAR
 
+
+def test_solar_switches_from_grid_when_headroom_covers_full_power() -> None:
     previous = Decision(
         state=STATE_ON,
         energy_mode=ENERGY_MODE_GRID_EXPENSIVE,
         reason="grid_expensive",
-        reason_text="Grid price above expensive threshold",
+        reason_text="expensive",
         available_power=0,
         required_power=1100,
         price_state="HIGH",
@@ -214,10 +262,27 @@ def test_solar_switches_from_grid_when_already_on_and_exporting() -> None:
         _load(required_power=1100),
         RuntimeTracker(),
         previous=previous,
+        power=_power(required=1100, measured=1100),
     )
     assert decision.state == STATE_ON
     assert decision.energy_mode == ENERGY_MODE_SOLAR
     assert decision.reason == REASON_GRID_EXPORT
+
+
+def test_solar_cold_start_chances_when_exporting() -> None:
+    decision = evaluate_load(
+        _global_state(grid_output=200),
+        _load(power_mode=POWER_MODE_SENSOR, required_power=None, power_sensor="sensor.x"),
+        RuntimeTracker(),
+        power=_power(
+            required=None,
+            measured=0,
+            mode=POWER_MODE_SENSOR,
+            learning=POWER_LEARNING_PENDING,
+        ),
+    )
+    assert decision.state == STATE_ON
+    assert decision.energy_mode == ENERGY_MODE_SOLAR
 
 
 def test_solar_stops_when_export_gone() -> None:
@@ -225,6 +290,7 @@ def test_solar_stops_when_export_gone() -> None:
         _global_state(grid_output=1500),
         _load(required_power=1000),
         RuntimeTracker(),
+        power=_power(required=1000, measured=0),
     )
     assert previous.state == STATE_ON
 
@@ -238,6 +304,7 @@ def test_solar_stops_when_export_gone() -> None:
         _load(required_power=1000),
         RuntimeTracker(),
         previous=previous,
+        power=_power(required=1000, measured=1000),
     )
     assert decision.state == STATE_ON
     assert decision.energy_mode == ENERGY_MODE_GRID_CHEAP
@@ -248,6 +315,7 @@ def test_solar_does_not_start_below_required_power() -> None:
         _global_state(grid_output=500),
         _load(required_power=1000, sources=SourceRules(solar_enabled=True)),
         RuntimeTracker(),
+        power=_power(required=1000, measured=0),
     )
     assert decision.state != STATE_ON or decision.energy_mode != ENERGY_MODE_SOLAR
 

@@ -138,14 +138,18 @@
           "sections": {
             "basic": {
               "name": "Grundinställningar",
-              "description": "Namn och effektbehov för lasten.",
+              "description": "Namn och hur effektbehovet bestäms.",
               "data": {
                 "name": "Namn",
-                "required_power": "Effektbehov (W)"
+                "power_mode": "Effektläge",
+                "required_power": "Fast effektbehov (W)",
+                "power_sensor": "Effektgivare för lasten (W)"
               },
               "data_description": {
-                "name": "Visningsnamn. Blir entity-id: energy_dispatcher.<namn_i_gemener>.",
-                "required_power": "Hur mycket effekt lasten behöver för att köra. Används vid export- och SOLAR-kontroll."
+                "name": "Visningsnamn. Blir entity id: energy_dispatcher.<gemener>.",
+                "power_mode": "Fast värde, eller lär maxeffekt från sensor under 7 dygn.",
+                "required_power": "Används vid fast läge. Effektbehov för SOLAR-kontroll.",
+                "power_sensor": "Används vid sensorläge. Momentan lasteffekt i watt."
               }
             },
             "self_consumption": {
@@ -196,14 +200,18 @@
           "sections": {
             "basic": {
               "name": "Grundinställningar",
-              "description": "Namn och effektbehov för lasten.",
+              "description": "Namn och hur effektbehovet bestäms.",
               "data": {
                 "name": "Namn",
-                "required_power": "Effektbehov (W)"
+                "power_mode": "Effektläge",
+                "required_power": "Fast effektbehov (W)",
+                "power_sensor": "Effektgivare för lasten (W)"
               },
               "data_description": {
-                "name": "Visningsnamn. Entity-id ändras inte om du byter namn.",
-                "required_power": "Hur mycket effekt lasten behöver för att köra."
+                "name": "Visningsnamn. Entity id ändras inte om du byter namn.",
+                "power_mode": "Fast värde, eller lär maxeffekt från sensor under 7 dygn.",
+                "required_power": "Används vid fast läge.",
+                "power_sensor": "Används vid sensorläge. Momentan lasteffekt i watt."
               }
             },
             "self_consumption": {
@@ -250,7 +258,9 @@
         }
       },
       "error": {
-        "load_exists": "En last med detta namn finns redan."
+        "load_exists": "En last med detta namn finns redan.",
+        "required_power_required": "Ange fast effektbehov, eller byt till sensorläge.",
+        "power_sensor_required": "Välj en effektgivare, eller byt till fast läge."
       }
     }
   },
@@ -259,6 +269,12 @@
       "options": {
         "none": "Inaktiverad",
         "simple_threshold": "Timlig kWh-gräns"
+      }
+    },
+    "power_mode": {
+      "options": {
+        "fixed": "Fast effekt (W)",
+        "sensor": "Lär från effektgivare"
       }
     }
   }

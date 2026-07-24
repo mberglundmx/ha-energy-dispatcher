@@ -31,7 +31,8 @@ action:
 
 - **Grid export detection** — prefer self-consumption when exporting to the grid
 - **Spot price evaluation** — generic price sensor, full timeline (today + tomorrow)
-- **Per-load rules** — allowed energy sources, required power, minimum runtime
+- **Per-load rules** — allowed energy sources, fixed or learned required power, minimum runtime
+- **Load power sensor** — optional: learn 7-day max power from a W sensor for SOLAR checks
 - **Runtime scheduling** — fulfil daily/weekly minute quotas on the cheapest allowed hours
 - **Power guard** — optional hourly import limit (kWh) with WARNING/CRITICAL states
 - **Services** — manual override and forced recalculation

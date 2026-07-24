@@ -138,14 +138,18 @@
           "sections": {
             "basic": {
               "name": "Basics",
-              "description": "Name and power requirement for this load.",
+              "description": "Name and how required power is determined.",
               "data": {
                 "name": "Name",
-                "required_power": "Required power (W)"
+                "power_mode": "Required power mode",
+                "required_power": "Fixed required power (W)",
+                "power_sensor": "Load power sensor (W)"
               },
               "data_description": {
                 "name": "Display name. Becomes entity id: energy_dispatcher.<lowercase_name>.",
-                "required_power": "Power needed to run. Used for export and SOLAR checks."
+                "power_mode": "Fixed value, or learn max power from a sensor over 7 days.",
+                "required_power": "Used when mode is fixed. Power needed for SOLAR checks.",
+                "power_sensor": "Used when mode is sensor. Instantaneous load power in watts."
               }
             },
             "self_consumption": {
@@ -196,14 +200,18 @@
           "sections": {
             "basic": {
               "name": "Basics",
-              "description": "Name and power requirement for this load.",
+              "description": "Name and how required power is determined.",
               "data": {
                 "name": "Name",
-                "required_power": "Required power (W)"
+                "power_mode": "Required power mode",
+                "required_power": "Fixed required power (W)",
+                "power_sensor": "Load power sensor (W)"
               },
               "data_description": {
                 "name": "Display name. Entity id does not change if you rename.",
-                "required_power": "Power needed to run this load."
+                "power_mode": "Fixed value, or learn max power from a sensor over 7 days.",
+                "required_power": "Used when mode is fixed.",
+                "power_sensor": "Used when mode is sensor. Instantaneous load power in watts."
               }
             },
             "self_consumption": {
@@ -250,7 +258,9 @@
         }
       },
       "error": {
-        "load_exists": "A load with this name already exists."
+        "load_exists": "A load with this name already exists.",
+        "required_power_required": "Enter a fixed required power, or switch mode to sensor.",
+        "power_sensor_required": "Select a load power sensor, or switch mode to fixed."
       }
     }
   },
@@ -259,6 +269,12 @@
       "options": {
         "none": "Disabled",
         "simple_threshold": "Hourly kWh limit"
+      }
+    },
+    "power_mode": {
+      "options": {
+        "fixed": "Fixed power (W)",
+        "sensor": "Learn from power sensor"
       }
     }
   }

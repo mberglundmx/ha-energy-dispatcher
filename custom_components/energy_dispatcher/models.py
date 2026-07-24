@@ -11,6 +11,8 @@ from .power_guard import PowerGuardState
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigSubentry
 
+from .const import POWER_MODE_FIXED, POWER_MODE_SENSOR
+
 
 @dataclass(frozen=True)
 class PriceSlot:
@@ -47,10 +49,23 @@ class LoadConfig:
 
     load_id: str
     name: str
-    required_power: float
     sources: SourceRules
+    power_mode: str = POWER_MODE_FIXED
+    required_power: float | None = None
+    power_sensor: str | None = None
     minimum_minutes_per_day: int | None = None
     minimum_minutes_per_week: int | None = None
+
+
+@dataclass(frozen=True)
+class LoadPowerSnapshot:
+    """Resolved power requirement/measurement for one evaluation."""
+
+    power_mode: str
+    power_learning: str
+    effective_required_power: float | None
+    measured_power: float
+    learned_required_power: float | None = None
 
 
 @dataclass(frozen=True)
@@ -102,10 +117,22 @@ def load_config_from_dict(data: dict[str, Any]) -> LoadConfig:
     """Build a LoadConfig from stored options data."""
     sources_data = data.get("allowed_sources", {})
     solar = sources_data.get("solar", {})
+    power_mode = data.get("power_mode", POWER_MODE_FIXED)
+    if power_mode not in (POWER_MODE_FIXED, POWER_MODE_SENSOR):
+        power_mode = POWER_MODE_FIXED
+    required_power = _optional_float(data.get("required_power"))
+    power_sensor = data.get("power_sensor") or None
+    # Legacy entries always had required_power and no power_mode.
+    if power_mode == POWER_MODE_FIXED and required_power is None:
+        required_power = 0.0
+    if power_mode == POWER_MODE_SENSOR:
+        required_power = None
     return LoadConfig(
         load_id=data["load_id"],
         name=data["name"],
-        required_power=float(data["required_power"]),
+        power_mode=power_mode,
+        required_power=required_power,
+        power_sensor=power_sensor if power_mode == POWER_MODE_SENSOR else None,
         sources=SourceRules(
             solar_enabled=bool(solar.get("enabled", False)),
             solar_max_export_price=_optional_float(solar.get("max_export_price")),
@@ -142,7 +169,9 @@ def load_config_to_dict(config: LoadConfig) -> dict[str, Any]:
     return {
         "load_id": config.load_id,
         "name": config.name,
+        "power_mode": config.power_mode,
         "required_power": config.required_power,
+        "power_sensor": config.power_sensor,
         "minimum_minutes_per_day": config.minimum_minutes_per_day,
         "minimum_minutes_per_week": config.minimum_minutes_per_week,
         "allowed_sources": {

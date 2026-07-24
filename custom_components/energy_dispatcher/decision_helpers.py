@@ -14,7 +14,7 @@ from .const import (
     PRICE_STATE_UNKNOWN,
     STATE_ON,
 )
-from .models import Decision, GlobalState, PriceSlot, SourceRules, LoadConfig
+from .models import Decision, GlobalState, LoadConfig, LoadPowerSnapshot, PriceSlot, SourceRules
 from .price_timeline import current_slot
 
 
@@ -101,30 +101,37 @@ def is_already_solar_on(previous: Decision | None) -> bool:
 
 
 def solar_surplus_covers_load(
-    load: LoadConfig,
     global_state: GlobalState,
-    previous: Decision | None = None,
+    power: LoadPowerSnapshot,
 ) -> bool:
-    """Whether SOLAR self-consumption is available.
+    """Whether SOLAR self-consumption is available for full rated power.
 
-    Turn ON requires export ≥ required_power. Once the load is already ON,
-    measured export is residual after the load — keep/switch to SOLAR while
-    any export remains.
+    Requires ongoing export. Headroom for full rated power is estimated as
+    ``export + measured_power`` (residual export plus what the load already
+    draws — i.e. surplus if the load were off / at full draw).
+
+    Example: export 100 W, measured 10 W, required 1000 W → 110 < 1000 → no.
+    Example: export 100 W, measured 1000 W, required 1000 W → 1100 >= 1000 → yes.
+
+    Cold start (required unknown): chance SOLAR while any export remains.
     """
     export_power = available_export_power(global_state)
-    if is_already_on(previous):
-        return export_power > 0
-    return export_power >= load.required_power
+    if export_power <= 0:
+        return False
+    required = power.effective_required_power
+    if required is None:
+        return True
+    return export_power + max(0.0, power.measured_power) >= required
 
 
 def solar_can_decide_without_price(
     load: LoadConfig,
     global_state: GlobalState,
-    previous: Decision | None = None,
+    power: LoadPowerSnapshot,
 ) -> bool:
     if not load.sources.solar_enabled:
         return False
-    if not solar_surplus_covers_load(load, global_state, previous):
+    if not solar_surplus_covers_load(global_state, power):
         return False
     if (
         load.sources.solar_max_export_price is not None
