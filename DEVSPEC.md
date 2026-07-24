@@ -241,7 +241,7 @@ Price levels (user-configurable):
 | Cheap grid | spot price < 30 % of rolling weekly average |
 | Expensive grid | spot price > 150 % of rolling weekly average |
 
-The decision engine evaluates **all available price data** from the sensor — typically today's and tomorrow's hourly prices once published (day-ahead markets usually publish next-day prices around midday).
+The decision engine evaluates **all available price data** from the sensor — typically today's and tomorrow's prices once published (day-ahead markets usually publish next-day prices around midday). Both **hourly and 15‑minute** resolutions are supported.
 
 A **PriceProvider** adapter normalizes sensor state and attributes into a uniform timeline:
 

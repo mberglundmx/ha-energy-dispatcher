@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .models import PriceSlot
+from .price_timeline import list_slot_step
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -93,6 +94,7 @@ def _parse_price_list(data: list[Any], now: datetime, attr_name: str) -> list[Pr
     slots: list[PriceSlot] = []
     day_offset = 1 if "tomorrow" in attr_name else 0
     base = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=day_offset)
+    step = list_slot_step(len(data))
 
     for index, item in enumerate(data):
         if isinstance(item, dict):
@@ -103,14 +105,14 @@ def _parse_price_list(data: list[Any], now: datetime, attr_name: str) -> list[Pr
             if start_raw is not None:
                 start = _parse_time_key(start_raw, now)
                 if start is None:
-                    start = base + timedelta(hours=index)
+                    start = base + step * index
             else:
-                start = base + timedelta(hours=index)
+                start = base + step * index
             slots.append(PriceSlot(start=start, price=price))
         else:
             price = _try_float(item)
             if price is not None:
-                slots.append(PriceSlot(start=base + timedelta(hours=index), price=price))
+                slots.append(PriceSlot(start=base + step * index, price=price))
     return sorted(slots, key=lambda slot: slot.start)
 
 
