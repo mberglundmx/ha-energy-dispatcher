@@ -191,6 +191,35 @@ def test_solar_hysteresis_keeps_on_while_still_exporting() -> None:
     assert decision.available_power == 500
 
 
+def test_solar_switches_from_grid_when_already_on_and_exporting() -> None:
+    """If already ON on grid with residual export, prefer SOLAR over GRID_*."""
+    from custom_components.energy_dispatcher.const import (
+        ENERGY_MODE_GRID_EXPENSIVE,
+        REASON_GRID_EXPORT,
+    )
+    from custom_components.energy_dispatcher.models import Decision
+
+    previous = Decision(
+        state=STATE_ON,
+        energy_mode=ENERGY_MODE_GRID_EXPENSIVE,
+        reason="grid_expensive",
+        reason_text="Grid price above expensive threshold",
+        available_power=0,
+        required_power=1100,
+        price_state="HIGH",
+        grid_state="NORMAL",
+    )
+    decision = evaluate_load(
+        _global_state(grid_output=1033),
+        _load(required_power=1100),
+        RuntimeTracker(),
+        previous=previous,
+    )
+    assert decision.state == STATE_ON
+    assert decision.energy_mode == ENERGY_MODE_SOLAR
+    assert decision.reason == REASON_GRID_EXPORT
+
+
 def test_solar_stops_when_export_gone() -> None:
     previous = evaluate_load(
         _global_state(grid_output=1500),

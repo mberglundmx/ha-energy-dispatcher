@@ -8,6 +8,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     ATTR_AVAILABLE_POWER,
+    ATTR_CURRENT_PRICE,
     ATTR_ENERGY_MODE,
     ATTR_GRID_STATE,
     ATTR_NEXT_OPPORTUNITY,
@@ -23,6 +24,7 @@ from .const import (
     ATTR_REASON,
     ATTR_REASON_TEXT,
     ATTR_REQUIRED_POWER,
+    ATTR_ROLLING_AVERAGE_PRICE,
     ATTR_RUNTIME_MINUTES_TODAY,
     ATTR_RUNTIME_MINUTES_WEEK,
     ATTR_RUNTIME_REMAINING_MINUTES,
@@ -30,6 +32,7 @@ from .const import (
     POWER_GUARD_STRATEGY_NONE,
 )
 from .coordinator import EnergyDispatcherCoordinator
+from .price_timeline import current_slot
 from .runtime_scheduler import remaining_runtime_minutes
 from .models import Decision, LoadConfig
 
@@ -92,6 +95,15 @@ class EnergyDispatcherEntity(CoordinatorEntity[EnergyDispatcherCoordinator], Ent
             ATTR_PRICE_STATE: decision.price_state,
             ATTR_GRID_STATE: decision.grid_state,
         }
+        global_state = self._global_state()
+        if global_state is not None:
+            current = current_slot(global_state.price_timeline, global_state.now)
+            if current is not None:
+                attrs[ATTR_CURRENT_PRICE] = current.price
+            if global_state.rolling_average_price is not None:
+                attrs[ATTR_ROLLING_AVERAGE_PRICE] = round(
+                    global_state.rolling_average_price, 4
+                )
         if decision.next_opportunity is not None:
             attrs[ATTR_NEXT_OPPORTUNITY] = decision.next_opportunity.isoformat()
 
@@ -126,13 +138,16 @@ class EnergyDispatcherEntity(CoordinatorEntity[EnergyDispatcherCoordinator], Ent
         return attrs
 
     def _power_guard_state(self):
-        data = self.coordinator.data
-        if not data:
-            return None
-        global_state = data.get("global_state")
+        global_state = self._global_state()
         if global_state is None:
             return None
         return global_state.power_guard
+
+    def _global_state(self):
+        data = self.coordinator.data
+        if not data:
+            return None
+        return data.get("global_state")
 
     @property
     def load_id(self) -> str:

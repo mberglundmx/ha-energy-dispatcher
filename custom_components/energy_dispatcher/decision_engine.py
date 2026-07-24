@@ -15,6 +15,7 @@ from .const import (
     PRICE_STATE_UNKNOWN,
     REASON_DATA_UNAVAILABLE,
     REASON_GRID_CHEAP,
+    REASON_GRID_EXPENSIVE,
     REASON_GRID_EXPORT,
     REASON_GRID_FREE,
     REASON_GRID_NORMAL,
@@ -30,12 +31,13 @@ from .const import (
 from .decision_helpers import (
     available_export_power,
     classify_price,
-    is_already_solar_on,
+    is_already_on,
     is_mode_allowed,
     is_price_data_ready,
     needs_price_data,
     price_state,
     solar_can_decide_without_price,
+    solar_surplus_covers_load,
 )
 from .models import Decision, GlobalState, LoadConfig, OverrideState
 from .runtime_scheduler import RuntimeTracker
@@ -152,15 +154,9 @@ def _evaluate_export(
     if not sources.solar_enabled:
         return None
 
-    export_power = available_export_power(global_state)
-    already_on = is_already_solar_on(previous)
-
-    # Turn ON requires surplus covering the load. Once ON / SOLAR, keep running
-    # while any export remains — the load itself reduces measured export.
-    if already_on:
-        if export_power <= 0:
-            return None
-    elif export_power < load.required_power:
+    # Turn ON requires surplus covering the load. Once already ON, measured
+    # export is residual after the load — keep/switch to SOLAR while exporting.
+    if not solar_surplus_covers_load(load, global_state, previous):
         return None
 
     max_export = sources.solar_max_export_price
@@ -168,6 +164,7 @@ def _evaluate_export(
         if global_state.export_price >= max_export:
             return None
 
+    already_on = is_already_on(previous)
     return Decision(
         state=STATE_ON,
         energy_mode=ENERGY_MODE_SOLAR,
@@ -240,6 +237,7 @@ def _reason_for_mode(mode: str, waiting: bool = False) -> str:
         ENERGY_MODE_GRID_FREE: REASON_GRID_FREE,
         ENERGY_MODE_GRID_CHEAP: REASON_GRID_CHEAP,
         ENERGY_MODE_GRID_NORMAL: REASON_GRID_NORMAL,
+        ENERGY_MODE_GRID_EXPENSIVE: REASON_GRID_EXPENSIVE,
     }.get(mode, REASON_NO_SOURCE)
 
 
@@ -255,4 +253,5 @@ def _reason_text_for_mode(mode: str, waiting: bool = False) -> str:
         ENERGY_MODE_GRID_FREE: "Grid price at or below free threshold",
         ENERGY_MODE_GRID_CHEAP: "Grid price below cheap threshold",
         ENERGY_MODE_GRID_NORMAL: "Grid price within normal range",
+        ENERGY_MODE_GRID_EXPENSIVE: "Grid price above expensive threshold",
     }.get(mode, "Allowed grid source available")

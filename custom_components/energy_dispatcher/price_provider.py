@@ -38,13 +38,24 @@ class PriceProvider:
         slots: list[PriceSlot] = []
         attrs = state.attributes
 
-        for attr in (ATTR_RAW_TODAY, ATTR_RAW_TOMORROW, ATTR_TODAY, ATTR_TOMORROW, ATTR_PRICES):
-            if attr not in attrs:
+        # Prefer raw_* (Nord Pool style). Merge today + tomorrow when both exist.
+        raw_pairs = ((ATTR_RAW_TODAY, ATTR_RAW_TOMORROW), (ATTR_TODAY, ATTR_TOMORROW))
+        for today_attr, tomorrow_attr in raw_pairs:
+            if today_attr not in attrs and tomorrow_attr not in attrs:
                 continue
-            parsed = _parse_price_mapping(attrs[attr], now, attr)
+            for attr in (today_attr, tomorrow_attr):
+                if attr not in attrs:
+                    continue
+                parsed = _parse_price_mapping(attrs[attr], now, attr)
+                if parsed:
+                    slots.extend(parsed)
+            if slots:
+                break
+
+        if not slots and ATTR_PRICES in attrs:
+            parsed = _parse_price_mapping(attrs[ATTR_PRICES], now, ATTR_PRICES)
             if parsed:
                 slots.extend(parsed)
-                break
 
         if not slots:
             current = _try_float(state.state)

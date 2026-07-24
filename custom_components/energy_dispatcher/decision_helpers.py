@@ -90,13 +90,31 @@ def needs_price_data(load: LoadConfig, global_state: GlobalState) -> bool:
     return False
 
 
+def is_already_on(previous: Decision | None) -> bool:
+    """True when the previous decision already recommended ON."""
+    return previous is not None and previous.state == STATE_ON
+
+
 def is_already_solar_on(previous: Decision | None) -> bool:
     """True when the previous decision already recommended ON / SOLAR."""
-    return (
-        previous is not None
-        and previous.state == STATE_ON
-        and previous.energy_mode == ENERGY_MODE_SOLAR
-    )
+    return is_already_on(previous) and previous.energy_mode == ENERGY_MODE_SOLAR
+
+
+def solar_surplus_covers_load(
+    load: LoadConfig,
+    global_state: GlobalState,
+    previous: Decision | None = None,
+) -> bool:
+    """Whether SOLAR self-consumption is available.
+
+    Turn ON requires export ≥ required_power. Once the load is already ON,
+    measured export is residual after the load — keep/switch to SOLAR while
+    any export remains.
+    """
+    export_power = available_export_power(global_state)
+    if is_already_on(previous):
+        return export_power > 0
+    return export_power >= load.required_power
 
 
 def solar_can_decide_without_price(
@@ -106,16 +124,8 @@ def solar_can_decide_without_price(
 ) -> bool:
     if not load.sources.solar_enabled:
         return False
-
-    export_power = available_export_power(global_state)
-    if is_already_solar_on(previous):
-        # Keep SOLAR while still exporting; required_power check would
-        # immediately turn the load off after it consumes the surplus.
-        if export_power <= 0:
-            return False
-    elif export_power < load.required_power:
+    if not solar_surplus_covers_load(load, global_state, previous):
         return False
-
     if (
         load.sources.solar_max_export_price is not None
         and global_state.export_price is None
