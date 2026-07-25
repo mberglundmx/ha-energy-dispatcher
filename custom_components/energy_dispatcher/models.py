@@ -111,6 +111,8 @@ class LoadRuntimeState:
 
     override: OverrideState | None = None
     last_decision: Decision | None = None
+    solar_eligible_since: datetime | None = None
+    solar_sustain_remaining: float = 0.0
 
 
 def load_config_from_dict(data: dict[str, Any]) -> LoadConfig:

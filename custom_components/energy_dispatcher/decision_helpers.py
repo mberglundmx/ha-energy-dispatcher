@@ -124,6 +124,44 @@ def solar_surplus_covers_load(
     return export_power + max(0.0, power.measured_power) >= required
 
 
+def solar_conditions_met(
+    global_state: GlobalState,
+    load: LoadConfig,
+    power: LoadPowerSnapshot,
+) -> bool:
+    """True when surplus/export-price rules would allow SOLAR right now."""
+    if not load.sources.solar_enabled:
+        return False
+    if not solar_surplus_covers_load(global_state, power):
+        return False
+    max_export = load.sources.solar_max_export_price
+    if max_export is not None and global_state.export_price is not None:
+        if global_state.export_price >= max_export:
+            return False
+    return True
+
+
+def update_solar_eligibility(
+    *,
+    conditions_met: bool,
+    now: datetime,
+    eligible_since: datetime | None,
+    sustain_minutes: float,
+) -> tuple[datetime | None, bool, float]:
+    """Track sustained SOLAR eligibility.
+
+    Returns (new_eligible_since, entry_ready, remaining_seconds).
+    Entry requires conditions_met continuously for sustain_minutes.
+    """
+    if not conditions_met:
+        return None, False, 0.0
+    since = eligible_since or now
+    elapsed = (now - since).total_seconds()
+    needed = sustain_minutes * 60.0
+    remaining = max(0.0, needed - elapsed)
+    return since, remaining <= 0, remaining
+
+
 def solar_can_decide_without_price(
     load: LoadConfig,
     global_state: GlobalState,

@@ -31,13 +31,13 @@ from .const import (
 from .decision_helpers import (
     available_export_power,
     classify_price,
-    is_already_on,
+    is_already_solar_on,
     is_mode_allowed,
     is_price_data_ready,
     needs_price_data,
     price_state,
     solar_can_decide_without_price,
-    solar_surplus_covers_load,
+    solar_conditions_met,
 )
 from .models import Decision, GlobalState, LoadConfig, LoadPowerSnapshot, OverrideState
 from .runtime_scheduler import RuntimeTracker
@@ -52,6 +52,8 @@ def evaluate_load(
     override: OverrideState | None = None,
     previous: Decision | None = None,
     power: LoadPowerSnapshot | None = None,
+    *,
+    solar_entry_ready: bool = True,
 ) -> Decision:
     """Evaluate whether a load should run and with which energy source."""
     power = power or LoadPowerSnapshot(
@@ -98,7 +100,9 @@ def evaluate_load(
     ):
         return _unknown_decision(base_kwargs)
 
-    export_decision = _evaluate_export(global_state, load, base_kwargs, previous, power)
+    export_decision = _evaluate_export(
+        global_state, load, base_kwargs, previous, power, solar_entry_ready
+    )
     if export_decision is not None:
         return export_decision
 
@@ -153,33 +157,36 @@ def _evaluate_export(
     base_kwargs: dict,
     previous: Decision | None,
     power: LoadPowerSnapshot,
+    solar_entry_ready: bool,
 ) -> Decision | None:
-    sources = load.sources
-    if not sources.solar_enabled:
+    if not solar_conditions_met(global_state, load, power):
         return None
 
-    if not solar_surplus_covers_load(global_state, power):
+    # Already on SOLAR: keep while conditions hold (no re-sustain delay).
+    if is_already_solar_on(previous):
+        return Decision(
+            state=STATE_ON,
+            energy_mode=ENERGY_MODE_SOLAR,
+            reason=REASON_GRID_EXPORT,
+            reason_text="Grid export covers full load power — keep self-consumption",
+            next_opportunity=None,
+            **base_kwargs,
+        )
+
+    # Entering SOLAR requires sustained surplus (anti-cloud-flapping).
+    if not solar_entry_ready:
         return None
 
-    max_export = sources.solar_max_export_price
-    if max_export is not None and global_state.export_price is not None:
-        if global_state.export_price >= max_export:
-            return None
-
-    already_on = is_already_on(previous)
     pending = power.effective_required_power is None
-    if pending:
-        reason_text = "Grid export available — learning load power"
-    elif already_on:
-        reason_text = "Grid export covers full load power — keep self-consumption"
-    else:
-        reason_text = "Grid export available — prefer self-consumption"
-
     return Decision(
         state=STATE_ON,
         energy_mode=ENERGY_MODE_SOLAR,
         reason=REASON_GRID_EXPORT,
-        reason_text=reason_text,
+        reason_text=(
+            "Grid export available — learning load power"
+            if pending
+            else "Grid export available — prefer self-consumption"
+        ),
         next_opportunity=None,
         **base_kwargs,
     )

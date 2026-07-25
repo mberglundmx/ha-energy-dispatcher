@@ -32,6 +32,8 @@ from .const import (
     ATTR_RUNTIME_MINUTES_TODAY,
     ATTR_RUNTIME_MINUTES_WEEK,
     ATTR_RUNTIME_REMAINING_MINUTES,
+    ATTR_SOLAR_ELIGIBLE_SINCE,
+    ATTR_SOLAR_SUSTAIN_REMAINING,
     DOMAIN,
     POWER_GUARD_STRATEGY_NONE,
     POWER_MODE_SENSOR,
@@ -110,6 +112,13 @@ class EnergyDispatcherEntity(CoordinatorEntity[EnergyDispatcherCoordinator], Ent
                     attrs[ATTR_LEARNED_REQUIRED_POWER] = round(
                         snapshot.learned_required_power, 1
                     )
+        runtime = self.coordinator.runtime.get(self._load.load_id)
+        if runtime is not None and runtime.solar_eligible_since is not None:
+            attrs[ATTR_SOLAR_ELIGIBLE_SINCE] = runtime.solar_eligible_since.isoformat()
+            if runtime.solar_sustain_remaining > 0:
+                attrs[ATTR_SOLAR_SUSTAIN_REMAINING] = int(
+                    round(runtime.solar_sustain_remaining)
+                )
         global_state = self._global_state()
         if global_state is not None:
             current = current_slot(global_state.price_timeline, global_state.now)

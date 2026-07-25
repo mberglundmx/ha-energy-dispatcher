@@ -26,6 +26,7 @@ from .const import (
     CONF_PRICE_FREE_THRESHOLD,
     CONF_PRICE_SENSOR,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SOLAR_SUSTAIN_MINUTES,
     DOMAIN,
     POWER_GUARD_STRATEGY_NONE,
     POWER_GUARD_STRATEGY_SIMPLE_THRESHOLD,
@@ -38,7 +39,7 @@ from .const import (
     SUBENTRY_TYPE_LOAD,
 )
 from .decision_engine import evaluate_load
-from .decision_helpers import is_already_on
+from .decision_helpers import is_already_on, solar_conditions_met, update_solar_eligibility
 from .hourly_aggregator import HourlyAggregator
 from .models import (
     GlobalState,
@@ -122,6 +123,16 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 power = self._resolve_power_snapshot(load, previous, now)
                 self._power_snapshots[load_id] = power
 
+            conditions = solar_conditions_met(data, load, power)
+            since, solar_entry_ready, remaining = update_solar_eligibility(
+                conditions_met=conditions,
+                now=now,
+                eligible_since=runtime.solar_eligible_since,
+                sustain_minutes=DEFAULT_SOLAR_SUSTAIN_MINUTES,
+            )
+            runtime.solar_eligible_since = since
+            runtime.solar_sustain_remaining = remaining
+
             decision = evaluate_load(
                 data,
                 load,
@@ -129,6 +140,7 @@ class EnergyDispatcherCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 runtime.override,
                 previous=previous,
                 power=power,
+                solar_entry_ready=solar_entry_ready,
             )
 
             if previous is not None and previous.state == STATE_ON:

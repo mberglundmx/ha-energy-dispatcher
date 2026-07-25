@@ -320,6 +320,40 @@ def test_solar_does_not_start_below_required_power() -> None:
     assert decision.state != STATE_ON or decision.energy_mode != ENERGY_MODE_SOLAR
 
 
+def test_solar_entry_waits_for_sustain() -> None:
+    decision = evaluate_load(
+        _global_state(grid_output=2500),
+        _load(),
+        RuntimeTracker(),
+        power=_power(required=1400, measured=0),
+        solar_entry_ready=False,
+    )
+    assert decision.energy_mode != ENERGY_MODE_SOLAR
+
+
+def test_solar_keep_skips_sustain_when_already_solar() -> None:
+    previous = Decision(
+        state=STATE_ON,
+        energy_mode=ENERGY_MODE_SOLAR,
+        reason=REASON_GRID_EXPORT,
+        reason_text="keep",
+        available_power=500,
+        required_power=1000,
+        price_state="LOW",
+        grid_state="NORMAL",
+    )
+    decision = evaluate_load(
+        _global_state(grid_output=500),
+        _load(required_power=1000),
+        RuntimeTracker(),
+        previous=previous,
+        power=_power(required=1000, measured=1000),
+        solar_entry_ready=False,
+    )
+    assert decision.state == STATE_ON
+    assert decision.energy_mode == ENERGY_MODE_SOLAR
+
+
 def test_power_guard_critical_forces_off() -> None:
     decision = evaluate_load(
         _global_state(

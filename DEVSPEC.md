@@ -465,6 +465,8 @@ The load may **start** SOLAR when there is grid export and headroom for full rat
 
 `required_power` is either a fixed config value or a **learned 7-day max** from an optional per-load power sensor (5-minute block averages while ON). Without learned values yet, SOLAR may still start on any export (“chance”). While already drawing near full power, residual export plus measured draw recovers classic hysteresis.
 
+Entering SOLAR also requires the surplus condition to hold continuously for **3 minutes** (anti-flapping under intermittent clouds). Keeping SOLAR has no extra delay while conditions remain met.
+
 ### Allowed Sources
 
 Rules describing which energy sources the load may use (see §9).
